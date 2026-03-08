@@ -57,7 +57,7 @@ class SongApiController extends Controller
             $filename = 'profile_' . time() . '_' . uniqid() . '.' . $extension;
             file_put_contents($dir . '/' . $filename, $decoded);
 
-            return 'upload/profiles/' . $userId . '/' . $filename;
+            return $filename; // Return only filename
 
         } catch (\Exception $e) {
             return null;
@@ -98,6 +98,41 @@ class SongApiController extends Controller
         return $apiUserId . '/' . $filename;
     }
 
+    private function getDefaultProfileImage(): string
+    {
+        $dir = public_path('upload/user-image');
+        $images = collect(scandir($dir))
+            ->filter(fn($f) => !in_array($f, ['.', '..']))
+            ->sortBy(fn($f) => (int) pathinfo($f, PATHINFO_FILENAME))
+            ->values();
+
+        $total = $images->count();
+        if ($total === 0)
+            return '';
+
+        // Round-robin: use current user count mod total images
+        $index = AppUser::count() % $total;
+
+        return $images[$index]; // Return only filename
+    }
+
+    // ---------------------------------------------------------------
+    // Helper: build the correct relative profile path for response
+    // ---------------------------------------------------------------
+    private function buildProfileUrl(?string $filename, ?string $userId): ?string
+    {
+        if (!$filename)
+            return null;
+
+        // If it's a default image (e.g. 1.webp, 2.webp...)
+        if (preg_match('/^\d+\.webp$/', $filename)) {
+            return 'user-image/' . $filename;
+        }
+
+        // Otherwise it's an uploaded profile image
+        return 'profiles/' . $userId . '/' . $filename;
+    }
+
     public function saveUser(Request $request)
     {
         $request->validate([
@@ -113,13 +148,17 @@ class SongApiController extends Controller
             ], 400);
         }
 
-        $profilePath = $this->saveProfileImage($request->user_profile, $request->user_id);
+        // If no profile uploaded, auto-assign a default image (round-robin)
+        $profileFilename = $request->user_profile
+            ? $this->saveProfileImage($request->user_profile, $request->user_id)
+            : $this->getDefaultProfileImage();
 
         $user = AppUser::create([
             'api_user_id' => $request->user_id,
             'username' => $request->username,
+            'email_address' => $request->email ?? $request->email_address, // Use 'email' if passed
             'password' => $request->password ? bcrypt($request->password) : null,
-            'user_profile' => $profilePath,
+            'user_profile' => $profileFilename,
         ]);
 
         return response()->json([
@@ -129,9 +168,10 @@ class SongApiController extends Controller
                 'id' => $user->id,
                 'api_user_id' => $user->api_user_id,
                 'username' => $user->username,
-                'user_profile' => $user->user_profile ? ltrim(str_replace('upload/', '', $user->user_profile), '/') : null,
+                'email' => $user->email_address, // Return as 'email' for consistency
                 'created_at' => $user->created_at,
                 'updated_at' => $user->updated_at,
+                'user_profile' => $this->buildProfileUrl($user->user_profile, $user->api_user_id),
             ],
         ]);
     }
@@ -145,10 +185,13 @@ class SongApiController extends Controller
         $user = AppUser::where('api_user_id', $request->user_id)->first();
 
         if (!$user) {
-            $profilePath = $this->saveProfileImage($request->user_profile, $request->user_id);
+            $profileFilename = $request->user_profile
+                ? $this->saveProfileImage($request->user_profile, $request->user_id)
+                : $this->getDefaultProfileImage();
             $user = AppUser::create([
                 'api_user_id' => $request->user_id,
-                'user_profile' => $profilePath,
+                'email_address' => $request->email ?? $request->email_address, // Store email if provided
+                'user_profile' => $profileFilename,
             ]);
         }
 
@@ -242,7 +285,8 @@ class SongApiController extends Controller
                 'id' => $user->id,
                 'api_user_id' => $user->api_user_id,
                 'username' => $user->username,
-                'user_profile' => $user->user_profile ? ltrim(str_replace('upload/', '', $user->user_profile), '/') : null,
+                'email' => $user->email_address, // Return as 'email'
+                'user_profile' => $this->buildProfileUrl($user->user_profile, $user->api_user_id),
                 'created_at' => $user->created_at,
                 'updated_at' => $user->updated_at,
                 'songs' => $songs,
@@ -330,6 +374,100 @@ class SongApiController extends Controller
             'message' => 'Random songs fetched successfully',
             'total' => $songs->count(),
             'data' => $songs,
+        ]);
+    }
+
+    // ---------------------------------------------------------------
+    // Get all distinct moods (id + name)
+    // ---------------------------------------------------------------
+    public function getMoods()
+    {
+        $moods = Song::whereNotNull('mood')
+            ->where('mood', '!=', '')
+            ->distinct()
+            ->orderBy('mood')
+            ->pluck('mood')
+            ->values()
+            ->map(fn($mood, $index) => [
+                'id' => $index + 1,
+                'name' => $mood,
+            ]);
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Moods fetched successfully',
+            'total' => $moods->count(),
+            'data' => $moods,
+        ]);
+    }
+
+    // ---------------------------------------------------------------
+    // Get all distinct genres (id + name)
+    // ---------------------------------------------------------------
+    public function getGenres()
+    {
+        $genres = Song::whereNotNull('genre')
+            ->where('genre', '!=', '')
+            ->distinct()
+            ->orderBy('genre')
+            ->pluck('genre')
+            ->values()
+            ->map(fn($genre, $index) => [
+                'id' => $index + 1,
+                'name' => $genre,
+            ]);
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Genres fetched successfully',
+            'total' => $genres->count(),
+            'data' => $genres,
+        ]);
+    }
+
+    // ---------------------------------------------------------------
+    // Edit user profile (username and/or profile image)
+    // ---------------------------------------------------------------
+    public function editProfile(Request $request)
+    {
+        $request->validate([
+            'email' => 'required|email', // Identifying by Email
+        ]);
+
+        $user = AppUser::where('email_address', $request->email)->first();
+
+        if (!$user) {
+            return response()->json([
+                'status' => false,
+                'message' => 'User not found with this email.',
+            ], 404);
+        }
+
+        if ($request->has('username')) {
+            $user->username = $request->username;
+        }
+
+        if ($request->has('user_profile') && !empty($request->user_profile)) {
+            $profileFilename = $this->saveProfileImage($request->user_profile, $user->api_user_id);
+            if ($profileFilename) {
+                $user->user_profile = $profileFilename;
+            }
+        }
+
+        $user->save();
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Profile updated successfully',
+            'data' => [
+                'id' => $user->id,
+                'api_user_id' => $user->api_user_id,
+                'username' => $user->username,
+                'email_address' => $user->email_address,
+                'user_profile' => $this->buildProfileUrl($user->user_profile, $user->api_user_id),
+                'created_at' => $user->created_at,
+                'updated_at' => $user->updated_at,
+            ],
         ]);
     }
 }

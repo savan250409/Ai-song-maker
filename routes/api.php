@@ -14,3 +14,6 @@ Route::post('/save-song', [SongApiController::class, 'saveSong']);
 Route::post('/get-user', [SongApiController::class, 'getUser']);
 Route::post('/get-songs-by-filter', [SongApiController::class, 'getSongsByFilter']);
 Route::get('/get-random-songs', [SongApiController::class, 'getRandomSongs']);
+Route::get('/get-moods', [SongApiController::class, 'getMoods']);
+Route::get('/get-genres', [SongApiController::class, 'getGenres']);
+Route::post('/edit-profile', [SongApiController::class, 'editProfile']);

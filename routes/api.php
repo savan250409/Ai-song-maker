@@ -11,3 +11,6 @@ Route::get('/user', function (Request $request) {
 
 Route::post('/save-user', [SongApiController::class, 'saveUser']);
 Route::post('/save-song', [SongApiController::class, 'saveSong']);
+Route::post('/get-user', [SongApiController::class, 'getUser']);
+Route::post('/get-songs-by-filter', [SongApiController::class, 'getSongsByFilter']);
+Route::get('/get-random-songs', [SongApiController::class, 'getRandomSongs']);

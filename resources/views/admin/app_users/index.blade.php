@@ -40,6 +40,7 @@
                                 <thead class="bg-light">
                                     <tr>
                                         <th style="width: 80px;"> ID </th>
+                                        <th style="width: 90px;"> Profile </th>
                                         <th> API User ID </th>
                                         <th> Username </th>
                                         <th style="width: 150px;"> Action </th>
@@ -49,6 +50,18 @@
                                     @forelse ($users as $user)
                                         <tr>
                                             <td> {{ $user->id }} </td>
+                                            <td>
+                                                @if ($user->user_profile)
+                                                    <img src="{{ asset($user->user_profile) }}"
+                                                         alt="Profile"
+                                                         style="width:45px;height:45px;object-fit:cover;border-radius:50%;border:2px solid #dee2e6;">
+                                                @else
+                                                    <span class="d-inline-flex align-items-center justify-content-center bg-secondary text-white rounded-circle"
+                                                          style="width:45px;height:45px;font-size:18px;">
+                                                        <i class="mdi mdi-account"></i>
+                                                    </span>
+                                                @endif
+                                            </td>
                                             <td> {{ $user->api_user_id }} </td>
                                             <td> {{ $user->username ?? 'N/A' }} </td>
                                             <td>
@@ -58,7 +71,7 @@
                                         </tr>
                                     @empty
                                         <tr>
-                                            <td colspan="4" class="text-center text-muted py-4">No users found matching your search.</td>
+                                            <td colspan="5" class="text-center text-muted py-4">No users found matching your search.</td>
                                         </tr>
                                     @endforelse
                                 </tbody>

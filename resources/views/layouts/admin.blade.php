@@ -20,10 +20,11 @@
   <div class="container-scroller">
     <nav class="navbar default-layout-navbar col-lg-12 col-12 p-0 fixed-top d-flex flex-row">
       <div class="text-center navbar-brand-wrapper d-flex align-items-center justify-content-start">
-        <a class="navbar-brand brand-logo" href="index.html"><img
-            src="{{ asset('admin_assets/assets') }}/images/logo.svg" alt="logo" /></a>
-        <a class="navbar-brand brand-logo-mini" href="index.html"><img
-            src="{{ asset('admin_assets/assets') }}/images/logo-mini.svg" alt="logo" /></a>
+        <a class="navbar-brand" href="{{ route('dashboard') }}" style="text-decoration: none;">
+          <h2
+            style="font-size: 2rem; font-weight: 700; letter-spacing: 4px; margin: 0; background: linear-gradient(135deg, #667eea, #764ba2); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+            NGD</h2>
+        </a>
       </div>
       <div class="navbar-menu-wrapper d-flex align-items-stretch">
         <button class="navbar-toggler navbar-toggler align-self-center" type="button" data-toggle="minimize">
@@ -41,11 +42,14 @@
               <p class="mb-1 text-black">NGD Admin</p>
             </a>
             <div class="dropdown-menu navbar-dropdown" aria-labelledby="profileDropdown">
-              <a class="dropdown-item" href="#">
-                <i class="mdi mdi-cached me-2 text-success"></i> Activity Log </a>
               <div class="dropdown-divider"></div>
-              <a class="dropdown-item" href="#">
-                <i class="mdi mdi-logout me-2 text-primary"></i> Signout </a>
+              <form method="POST" action="{{ route('logout') }}">
+                @csrf
+                <button type="submit" class="dropdown-item"
+                  style="background: none; border: none; width: 100%; text-align: left; cursor: pointer;">
+                  <i class="mdi mdi-logout me-2 text-primary"></i> Signout
+                </button>
+              </form>
             </div>
           </li>
 

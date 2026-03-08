@@ -10,6 +10,7 @@ class AppUser extends Model
         'api_user_id',
         'username',
         'password',
+        'user_profile',
     ];
 
     public function songs()

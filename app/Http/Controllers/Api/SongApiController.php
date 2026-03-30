@@ -101,14 +101,20 @@ class SongApiController extends Controller
     private function getDefaultProfileImage(): string
     {
         $dir = public_path('upload/user-image');
+
+        if (!is_dir($dir) || !is_readable($dir)) {
+            return '';
+        }
+
         $images = collect(scandir($dir))
             ->filter(fn($f) => !in_array($f, ['.', '..']))
             ->sortBy(fn($f) => (int) pathinfo($f, PATHINFO_FILENAME))
             ->values();
 
         $total = $images->count();
-        if ($total === 0)
+        if ($total === 0) {
             return '';
+        }
 
         // Round-robin: use current user count mod total images
         $index = AppUser::count() % $total;
@@ -133,10 +139,23 @@ class SongApiController extends Controller
         return 'profiles/' . $userId . '/' . $filename;
     }
 
+    private function normalizeProfileName(?string $profileName): ?string
+    {
+        if (!$profileName) {
+            return null;
+        }
+
+        $profileName = trim($profileName);
+        $profileName = preg_replace('/\s+/', '', $profileName);
+
+        return $profileName ?: null;
+    }
+
     public function saveUser(Request $request)
     {
         $request->validate([
             'user_id' => 'required',
+            'profile_name' => 'nullable|string',
         ]);
 
         $existingUser = AppUser::where('api_user_id', $request->user_id)->first();
@@ -156,8 +175,8 @@ class SongApiController extends Controller
         $user = AppUser::create([
             'api_user_id' => $request->user_id,
             'username' => $request->username,
+            'profile_name' => $this->normalizeProfileName($request->profile_name ?? $request->username),
             'email_address' => $request->email ?? $request->email_address, // Use 'email' if passed
-            'password' => $request->password ? bcrypt($request->password) : null,
             'user_profile' => $profileFilename,
         ]);
 
@@ -169,6 +188,7 @@ class SongApiController extends Controller
                 'api_user_id' => $user->api_user_id,
                 'username' => $user->username,
                 'email' => $user->email_address, // Return as 'email' for consistency
+                'profile_name' => $user->profile_name,
                 'created_at' => $user->created_at,
                 'updated_at' => $user->updated_at,
                 'user_profile' => $this->buildProfileUrl($user->user_profile, $user->api_user_id),
@@ -190,6 +210,7 @@ class SongApiController extends Controller
                 : $this->getDefaultProfileImage();
             $user = AppUser::create([
                 'api_user_id' => $request->user_id,
+                'profile_name' => $this->normalizeProfileName($request->profile_name ?? $request->username),
                 'email_address' => $request->email ?? $request->email_address, // Store email if provided
                 'user_profile' => $profileFilename,
             ]);
@@ -286,6 +307,7 @@ class SongApiController extends Controller
                 'api_user_id' => $user->api_user_id,
                 'username' => $user->username,
                 'email' => $user->email_address, // Return as 'email'
+                'profile_name' => $user->profile_name,
                 'user_profile' => $this->buildProfileUrl($user->user_profile, $user->api_user_id),
                 'created_at' => $user->created_at,
                 'updated_at' => $user->updated_at,
@@ -447,6 +469,10 @@ class SongApiController extends Controller
             $user->username = $request->username;
         }
 
+        if ($request->has('profile_name')) {
+            $user->profile_name = $this->normalizeProfileName($request->profile_name);
+        }
+
         if ($request->has('user_profile') && !empty($request->user_profile)) {
             $profileFilename = $this->saveProfileImage($request->user_profile, $user->api_user_id);
             if ($profileFilename) {
@@ -463,6 +489,7 @@ class SongApiController extends Controller
                 'id' => $user->id,
                 'api_user_id' => $user->api_user_id,
                 'username' => $user->username,
+                'profile_name' => $user->profile_name,
                 'email_address' => $user->email_address,
                 'user_profile' => $this->buildProfileUrl($user->user_profile, $user->api_user_id),
                 'created_at' => $user->created_at,

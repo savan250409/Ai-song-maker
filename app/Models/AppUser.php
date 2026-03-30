@@ -9,8 +9,8 @@ class AppUser extends Model
     protected $fillable = [
         'api_user_id',
         'username',
+        'profile_name',
         'email_address',
-        'password',
         'user_profile',
     ];
 

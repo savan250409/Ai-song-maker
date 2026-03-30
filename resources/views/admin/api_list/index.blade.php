@@ -64,10 +64,10 @@
                                         <td>Display name of the user</td>
                                     </tr>
                                     <tr>
-                                        <td><code>password</code></td>
+                                        <td><code>profile_name</code></td>
                                         <td>string</td>
                                         <td><span class="badge badge-secondary">No</span></td>
-                                        <td>User's password (stored as bcrypt hash)</td>
+                                        <td>Profile name with all whitespace removed. If omitted, a sanitized version of <code>username</code> is used.</td>
                                     </tr>
                                     <tr>
                                         <td><code>user_profile</code></td>
@@ -338,6 +338,12 @@
                                         <td>string</td>
                                         <td><span class="badge badge-secondary">No</span></td>
                                         <td>New username to update</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>profile_name</code></td>
+                                        <td>string</td>
+                                        <td><span class="badge badge-secondary">No</span></td>
+                                        <td>New profile name with whitespace removed.</td>
                                     </tr>
                                     <tr>
                                         <td><code>user_profile</code></td>

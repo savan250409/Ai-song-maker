@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 
 use App\Models\AppUser;
 use App\Models\Song;
+use Illuminate\Support\Facades\Log;
 
 class SongApiController extends Controller
 {
@@ -80,6 +81,7 @@ class SongApiController extends Controller
             $decoded = base64_decode(str_replace(' ', '+', $imageData), strict: true);
 
             if ($decoded === false) {
+                Log::warning('saveSongCoverImage: base64_decode failed', ['userId' => $userId]);
                 return null;
             }
 
@@ -98,14 +100,98 @@ class SongApiController extends Controller
 
             $dir = public_path('upload/' . $userId);
             if (!file_exists($dir)) {
-                mkdir($dir, 0777, true);
+                if (!mkdir($dir, 0755, true) && !is_dir($dir)) {
+                    Log::error('saveSongCoverImage: failed to create directory', ['dir' => $dir]);
+                    return null;
+                }
             }
 
             $filename = 'cover_' . time() . '_' . uniqid() . '.' . $extension;
-            file_put_contents($dir . '/' . $filename, $decoded);
+            $written = file_put_contents($dir . '/' . $filename, $decoded);
+
+            if ($written === false) {
+                Log::error('saveSongCoverImage: file_put_contents failed', ['path' => $dir . '/' . $filename]);
+                return null;
+            }
 
             return $filename;
         } catch (\Exception $e) {
+            Log::error('saveSongCoverImage exception', ['error' => $e->getMessage(), 'userId' => $userId]);
+            return null;
+        }
+    }
+
+    // ---------------------------------------------------------------
+    // Helper: download a cover image from a URL and save it locally.
+    // Returns filename on success, null on failure.
+    // ---------------------------------------------------------------
+    private function saveSongCoverImageFromUrl(string $imageUrl, string $userId): ?string
+    {
+        try {
+            $dir = public_path('upload/' . $userId);
+            if (!file_exists($dir)) {
+                if (!mkdir($dir, 0755, true) && !is_dir($dir)) {
+                    Log::error('saveSongCoverImageFromUrl: failed to create directory', ['dir' => $dir]);
+                    return null;
+                }
+            }
+
+            // Use cURL for reliable download with proper headers
+            $ch = curl_init($imageUrl);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_MAXREDIRS      => 5,
+                CURLOPT_TIMEOUT        => 30,
+                CURLOPT_USERAGENT      => 'Mozilla/5.0 (compatible; SongApp/1.0)',
+                CURLOPT_SSL_VERIFYPEER => false,
+            ]);
+            $contents = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curlError = curl_error($ch);
+            curl_close($ch);
+
+            if ($contents === false || $httpCode < 200 || $httpCode >= 300 || empty($contents)) {
+                Log::warning('saveSongCoverImageFromUrl: download failed', [
+                    'url' => $imageUrl,
+                    'http_code' => $httpCode,
+                    'curl_error' => $curlError,
+                ]);
+                return null;
+            }
+
+            // Detect extension from MIME type
+            $extension = 'jpg';
+            $finfo = new \finfo(FILEINFO_MIME_TYPE);
+            $mime = $finfo->buffer($contents);
+            $map = [
+                'image/jpeg' => 'jpg',
+                'image/png'  => 'png',
+                'image/gif'  => 'gif',
+                'image/webp' => 'webp',
+            ];
+            if (isset($map[$mime])) {
+                $extension = $map[$mime];
+            } else {
+                // Fallback: try to grab extension from URL path
+                $urlPath = parse_url($imageUrl, PHP_URL_PATH) ?? '';
+                $urlExt  = strtolower(pathinfo($urlPath, PATHINFO_EXTENSION));
+                if (in_array($urlExt, ['jpg', 'jpeg', 'png', 'gif', 'webp'])) {
+                    $extension = $urlExt === 'jpeg' ? 'jpg' : $urlExt;
+                }
+            }
+
+            $filename = 'cover_' . time() . '_' . uniqid() . '.' . $extension;
+            $written = file_put_contents($dir . '/' . $filename, $contents);
+
+            if ($written === false) {
+                Log::error('saveSongCoverImageFromUrl: file_put_contents failed', ['path' => $dir . '/' . $filename]);
+                return null;
+            }
+
+            return $filename;
+        } catch (\Exception $e) {
+            Log::error('saveSongCoverImageFromUrl exception', ['error' => $e->getMessage(), 'url' => $imageUrl]);
             return null;
         }
     }
@@ -116,7 +202,7 @@ class SongApiController extends Controller
             return null;
         }
 
-        return 'upload/' . $userId . '/' . $filename;
+        return asset('upload/' . $userId . '/' . $filename);
     }
 
     // ---------------------------------------------------------------
@@ -150,7 +236,7 @@ class SongApiController extends Controller
         if (!$filename)
             return null;
 
-        return $apiUserId . '/' . $filename;
+        return asset('upload/' . $apiUserId . '/' . $filename);
     }
 
     private function getDefaultProfileImage(): string
@@ -187,11 +273,11 @@ class SongApiController extends Controller
 
         // If it's a default image (e.g. 1.webp, 2.webp...)
         if (preg_match('/^\d+\.webp$/', $filename)) {
-            return 'user-image/' . $filename;
+            return asset('upload/user-image/' . $filename);
         }
 
         // Otherwise it's an uploaded profile image
-        return 'profiles/' . $userId . '/' . $filename;
+        return asset('upload/profiles/' . $userId . '/' . $filename);
     }
 
     private function normalizeProfileName(?string $profileName): ?string
@@ -253,6 +339,15 @@ class SongApiController extends Controller
 
     public function saveSong(Request $request)
     {
+        \Log::info('saveSong: START', [
+            'user_id'       => $request->user_id,
+            'song_url'      => $request->song_url,
+            'has_cover'     => $request->filled('cover_image'),
+            'cover_is_url'  => $request->filled('cover_image')
+                ? (str_starts_with(trim($request->cover_image), 'http') ? 'yes' : 'no(base64)')
+                : 'not provided',
+        ]);
+
         $request->validate([
             'user_id' => 'required',
             'cover_image' => 'nullable|string',
@@ -261,6 +356,7 @@ class SongApiController extends Controller
         $user = AppUser::where('api_user_id', $request->user_id)->first();
 
         if (!$user) {
+            \Log::info('saveSong: user not found, creating new user', ['user_id' => $request->user_id]);
             $profileFilename = $request->user_profile
                 ? $this->saveProfileImage($request->user_profile, $request->user_id)
                 : $this->getDefaultProfileImage();
@@ -276,16 +372,33 @@ class SongApiController extends Controller
         $localPath = null;
         $coverImageFilename = null;
 
+        // ---- COVER IMAGE SAVE ----
         if ($request->filled('cover_image')) {
-            $coverImageFilename = $this->saveSongCoverImage($request->cover_image, $request->user_id);
+            $coverRaw = trim($request->cover_image);
+            \Log::info('saveSong: processing cover_image', ['type' => str_starts_with($coverRaw, 'http') ? 'url' : 'base64']);
+            // If it's a URL (from API), download it; otherwise treat as base64
+            if (str_starts_with($coverRaw, 'http://') || str_starts_with($coverRaw, 'https://')) {
+                $coverImageFilename = $this->saveSongCoverImageFromUrl($coverRaw, $request->user_id);
+            } else {
+                $coverImageFilename = $this->saveSongCoverImage($coverRaw, $request->user_id);
+            }
+            \Log::info('saveSong: cover_image result', ['coverImageFilename' => $coverImageFilename]);
+        } else {
+            \Log::info('saveSong: no cover_image in request');
         }
 
+        // ---- SONG DOWNLOAD ----
         if ($songUrl) {
+            \Log::info('saveSong: starting song download', ['song_url' => $songUrl]);
             try {
                 $destinationDir = public_path('upload/' . $request->user_id);
+                \Log::info('saveSong: destination dir', ['dir' => $destinationDir, 'exists' => file_exists($destinationDir)]);
+
                 if (!file_exists($destinationDir)) {
-                    mkdir($destinationDir, 0777, true);
+                    $mkdirResult = mkdir($destinationDir, 0755, true);
+                    \Log::info('saveSong: mkdir result', ['result' => $mkdirResult, 'dir' => $destinationDir]);
                 }
+
                 $parsedUrl = parse_url($songUrl);
                 $originalFilename = basename($parsedUrl['path'] ?? 'downloaded_song.mp3');
 
@@ -294,17 +407,128 @@ class SongApiController extends Controller
                 $originalFilename = preg_replace('/[^A-Za-z0-9_\-\.]/', '_', $originalFilename);
 
                 $absoluteLocalPath = $destinationDir . '/' . $originalFilename;
+                \Log::info('saveSong: downloading song file', ['filename' => $originalFilename, 'dest' => $absoluteLocalPath]);
 
                 // Download the file stream and save it
                 $fileContents = file_get_contents($songUrl);
                 if ($fileContents !== false) {
-                    file_put_contents($absoluteLocalPath, $fileContents);
+                    $written = file_put_contents($absoluteLocalPath, $fileContents);
+                    \Log::info('saveSong: song file written', ['bytes' => $written, 'path' => $absoluteLocalPath]);
                     // Store JUST the filename in the database
                     $localPath = $originalFilename;
+
+                    // ---- EMBED COVER INTO AUDIO TAG ----
+                    if ($coverImageFilename) {
+                        \Log::info('saveSong: embedding cover into audio tag');
+                        try {
+                            $coverPath = public_path('upload/' . $request->user_id . '/' . $coverImageFilename);
+                            \Log::info('saveSong: cover path check', [
+                                'coverPath'       => $coverPath,
+                                'cover_exists'    => file_exists($coverPath),
+                                'song_exists'     => file_exists($absoluteLocalPath),
+                            ]);
+                            if (file_exists($coverPath) && file_exists($absoluteLocalPath)) {
+                                $getID3 = new \getID3();
+                                $fileInfo = $getID3->analyze($absoluteLocalPath);
+                                $fileFormat = $fileInfo['fileformat'] ?? 'mp3';
+                                \Log::info('saveSong: getID3 detected format', ['fileformat' => $fileFormat]);
+
+                                $currentExt = strtolower(pathinfo($absoluteLocalPath, PATHINFO_EXTENSION));
+
+                                // FFmpeg True Conversion Fallback
+                                if ($fileFormat === 'flac' && $currentExt === 'mp3') {
+                                    \Log::info('saveSong: Flac audio pretending to be MP3. Converting safely to TRUE MP3 via FFmpeg.');
+                                    $tempFlac = preg_replace('/\.mp3$/i', '_' . time() . '.flac', $absoluteLocalPath);
+                                    rename($absoluteLocalPath, $tempFlac);
+                                    
+                                    $ffmpegCmd = 'ffmpeg -y -i "' . $tempFlac . '" -codec:a libmp3lame -q:a 2 "' . $absoluteLocalPath . '" 2>&1';
+                                    exec($ffmpegCmd, $output, $returnCode);
+                                    
+                                    \Log::info('saveSong: FFmpeg execute result', ['returnCode' => $returnCode, 'output' => implode("\n", $output)]);
+                                    
+                                    if ($returnCode === 0) {
+                                        @unlink($tempFlac);
+                                        $fileFormat = 'mp3'; // It is now genuinely MP3
+                                    } else {
+                                         // If FFmpeg fails (missing package), revert filename so metaflac acts on it natively
+                                         rename($tempFlac, $absoluteLocalPath);
+                                         
+                                         // Explicitly rename the downloaded file extension so that Windows Media Player naturally allows picture tag rendering.
+                                         $newAbsoluteLocalPath = preg_replace('/\.[^.]+$/', '.' . $fileFormat, $absoluteLocalPath);
+                                         if (rename($absoluteLocalPath, $newAbsoluteLocalPath)) {
+                                             \Log::info('saveSong: FFmpeg missing -> renamed file natively instead', ['new' => $newAbsoluteLocalPath]);
+                                             $absoluteLocalPath = $newAbsoluteLocalPath;
+                                             $localPath = preg_replace('/\.[^.]+$/', '.' . $fileFormat, $localPath);
+                                         }
+                                    }
+                                } elseif ($fileFormat !== 'mp3' && $fileFormat !== 'riff' && $currentExt !== $fileFormat && $fileFormat !== '') {
+                                    // Explicitly rename the downloaded file extension so that Windows Media Player naturally allows picture tag rendering.
+                                    $newAbsoluteLocalPath = preg_replace('/\.[^.]+$/', '.' . $fileFormat, $absoluteLocalPath);
+                                    if (rename($absoluteLocalPath, $newAbsoluteLocalPath)) {
+                                        \Log::info('saveSong: renamed file natively', ['old' => $absoluteLocalPath, 'new' => $newAbsoluteLocalPath]);
+                                        $absoluteLocalPath = $newAbsoluteLocalPath;
+                                        $localPath = preg_replace('/\.[^.]+$/', '.' . $fileFormat, $localPath);
+                                    }
+                                }
+
+                                $tagwriter = new \getid3_writetags();
+                                $tagwriter->filename = $absoluteLocalPath;
+
+                                // getID3 explicitly rejects ID3 tags on FLAC/OGG files, so assign appropriately
+                                if ($fileFormat === 'flac') {
+                                    $tagwriter->tagformats = ['metaflac'];
+                                } elseif ($fileFormat === 'ogg') {
+                                    $tagwriter->tagformats = ['vorbiscomment'];
+                                } elseif ($fileFormat === 'mpc') {
+                                    $tagwriter->tagformats = ['ape'];
+                                } else {
+                                    $tagwriter->tagformats = ['id3v2.3'];
+                                }
+                                $tagwriter->overwrite_tags = true;
+                                $tagwriter->remove_other_tags = false;
+                                $tagwriter->tag_encoding = 'UTF-8';
+
+                                $imageData = file_get_contents($coverPath);
+                                $mime = mime_content_type($coverPath) ?: 'image/jpeg';
+
+                                $tagData = [
+                                    'title' => [$request->title ?? 'AI Generated Song'],
+                                    'artist' => [$user->username ?? 'AI Song Maker'],
+                                    'album' => ['AI Song Maker'],
+                                    'genre' => [$request->genre ?? 'Unknown'],
+                                    'attached_picture' => [
+                                        [
+                                            'data' => $imageData,
+                                            'picturetypeid' => 3, // Front cover
+                                            'mime' => $mime,
+                                            'description' => '' // Some older players like WMP strictly require an empty description!
+                                        ]
+                                    ]
+                                ];
+
+                                $tagwriter->tag_data = $tagData;
+                                $result = $tagwriter->WriteTags();
+                                \Log::info('saveSong: WriteTags result', [
+                                    'result' => $result,
+                                    'errors'   => $tagwriter->errors ?? [],
+                                    'warnings' => $tagwriter->warnings ?? [],
+                                ]);
+                            } else {
+                                \Log::warning('saveSong: cover or song file missing, skipping tag embed', [
+                                    'cover_exists' => file_exists($coverPath),
+                                    'song_exists'  => file_exists($absoluteLocalPath),
+                                ]);
+                            }
+                        } catch (\Throwable $e) {
+                            \Log::error('saveSong: WriteTags exception', ['error' => $e->getMessage()]);
+                        }
+                    }
                 } else {
+                    \Log::error('saveSong: file_get_contents failed for song URL', ['song_url' => $songUrl]);
                     $localPath = $songUrl; // Fallback to original if download fails
                 }
             } catch (\Exception $e) {
+                \Log::error('saveSong: song download exception', ['error' => $e->getMessage(), 'song_url' => $songUrl]);
                 // Fallback to storing original URL if something goes wrong (e.g., 404, connection issues)
                 $localPath = $songUrl;
             }

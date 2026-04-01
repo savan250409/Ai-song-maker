@@ -13,6 +13,7 @@ class Song extends Model
         'lyrics',
         'title',
         'song_url',
+        'cover_image',
     ];
 
     public function appUser()

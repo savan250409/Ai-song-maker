@@ -64,6 +64,61 @@ class SongApiController extends Controller
         }
     }
 
+    private function saveSongCoverImage(?string $base64String, string $userId): ?string
+    {
+        if (!$base64String) {
+            return null;
+        }
+
+        try {
+            // Strip optional data-URI prefix: data:image/png;base64,<data>
+            $imageData = $base64String;
+            if (str_contains($base64String, ',')) {
+                [, $imageData] = explode(',', $base64String, 2);
+            }
+
+            $decoded = base64_decode(str_replace(' ', '+', $imageData), strict: true);
+
+            if ($decoded === false) {
+                return null;
+            }
+
+            $extension = 'jpg';
+            $finfo = new \finfo(FILEINFO_MIME_TYPE);
+            $mime = $finfo->buffer($decoded);
+            $map = [
+                'image/jpeg' => 'jpg',
+                'image/png' => 'png',
+                'image/gif' => 'gif',
+                'image/webp' => 'webp',
+            ];
+            if (isset($map[$mime])) {
+                $extension = $map[$mime];
+            }
+
+            $dir = public_path('upload/' . $userId);
+            if (!file_exists($dir)) {
+                mkdir($dir, 0777, true);
+            }
+
+            $filename = 'cover_' . time() . '_' . uniqid() . '.' . $extension;
+            file_put_contents($dir . '/' . $filename, $decoded);
+
+            return $filename;
+        } catch (\Exception $e) {
+            return null;
+        }
+    }
+
+    private function buildCoverImageUrl(?string $filename, ?string $userId): ?string
+    {
+        if (!$filename || !$userId) {
+            return null;
+        }
+
+        return 'upload/' . $userId . '/' . $filename;
+    }
+
     // ---------------------------------------------------------------
     // Helper: build the correct public song URL from the stored value.
     // song_url in DB can be:
@@ -200,6 +255,7 @@ class SongApiController extends Controller
     {
         $request->validate([
             'user_id' => 'required',
+            'cover_image' => 'nullable|string',
         ]);
 
         $user = AppUser::where('api_user_id', $request->user_id)->first();
@@ -218,6 +274,11 @@ class SongApiController extends Controller
 
         $songUrl = $request->song_url;
         $localPath = null;
+        $coverImageFilename = null;
+
+        if ($request->filled('cover_image')) {
+            $coverImageFilename = $this->saveSongCoverImage($request->cover_image, $request->user_id);
+        }
 
         if ($songUrl) {
             try {
@@ -256,6 +317,7 @@ class SongApiController extends Controller
             'lyrics' => $request->lyrics,
             'title' => $request->title,
             'song_url' => $localPath,
+            'cover_image' => $coverImageFilename,
         ]);
 
         return response()->json([
@@ -267,6 +329,8 @@ class SongApiController extends Controller
                 'genre' => $song->genre,
                 'mood' => $song->mood,
                 'lyrics' => $song->lyrics,
+                'song_url' => $this->buildSongUrl($song->song_url, $user->api_user_id),
+                'cover_image' => $this->buildCoverImageUrl($song->cover_image, $user->api_user_id),
                 'created_at' => $song->created_at,
                 'updated_at' => $song->updated_at,
             ],
@@ -295,6 +359,8 @@ class SongApiController extends Controller
             'genre' => $s->genre,
             'mood' => $s->mood,
             'lyrics' => $s->lyrics,
+            'song_url' => $this->buildSongUrl($s->song_url, $user->api_user_id),
+            'cover_image' => $this->buildCoverImageUrl($s->cover_image, $user->api_user_id),
             'created_at' => $s->created_at,
             'updated_at' => $s->updated_at,
         ]);
@@ -313,6 +379,89 @@ class SongApiController extends Controller
                 'updated_at' => $user->updated_at,
                 'songs' => $songs,
             ],
+        ]);
+    }
+
+    public function deleteUser(Request $request)
+    {
+        $request->validate([
+            'user_id' => 'required',
+        ]);
+
+        $user = AppUser::with('songs')->where('api_user_id', $request->user_id)->first();
+
+        if (!$user) {
+            return response()->json([
+                'status' => false,
+                'message' => 'User not found.',
+            ], 404);
+        }
+
+        \DB::transaction(function () use ($user) {
+            $userDir = public_path('upload/' . $user->api_user_id);
+            $profileDir = public_path('upload/profiles/' . $user->api_user_id);
+
+            foreach ($user->songs as $song) {
+                $songFile = $song->song_url;
+
+                if ($songFile) {
+                    if (str_starts_with($songFile, 'http://') || str_starts_with($songFile, 'https://')) {
+                        $songFile = basename(parse_url($songFile, PHP_URL_PATH) ?? '');
+                    }
+
+                    $songFile = urldecode($songFile);
+                    $songFile = preg_replace('/[^A-Za-z0-9_\-\.]/', '_', $songFile);
+
+                    if ($songFile) {
+                        $songPath = $userDir . '/' . $songFile;
+                        if (file_exists($songPath) && is_file($songPath)) {
+                            @unlink($songPath);
+                        }
+                    }
+                }
+
+                if ($song->cover_image) {
+                    $coverFile = $song->cover_image;
+                    $coverFile = urldecode($coverFile);
+                    $coverFile = preg_replace('/[^A-Za-z0-9_\-\.]/', '_', $coverFile);
+                    if ($coverFile) {
+                        $coverPath = $userDir . '/' . $coverFile;
+                        if (file_exists($coverPath) && is_file($coverPath)) {
+                            @unlink($coverPath);
+                        }
+                    }
+                }
+
+                $song->delete();
+            }
+
+            if ($user->user_profile && !preg_match('/^\d+\.webp$/', $user->user_profile)) {
+                $profilePath = $profileDir . '/' . $user->user_profile;
+                if (file_exists($profilePath) && is_file($profilePath)) {
+                    @unlink($profilePath);
+                }
+            }
+
+            if (is_dir($userDir)) {
+                $remaining = array_diff(scandir($userDir), ['.', '..']);
+                if (empty($remaining)) {
+                    @rmdir($userDir);
+                }
+            }
+
+            if (is_dir($profileDir)) {
+                $remaining = array_diff(scandir($profileDir), ['.', '..']);
+                if (empty($remaining)) {
+                    @rmdir($profileDir);
+                }
+            }
+
+            $user->delete();
+        });
+
+        return response()->json([
+            'status' => true,
+            'message' => 'User and all associated songs deleted successfully',
         ]);
     }
 
@@ -353,6 +502,7 @@ class SongApiController extends Controller
                 'mood' => $song->mood,
                 'lyrics' => $song->lyrics,
                 'song_url' => $songUrl,
+                'cover_image' => $this->buildCoverImageUrl($song->cover_image, $song->appUser?->api_user_id),
                 'created_at' => $song->created_at,
                 'updated_at' => $song->updated_at,
             ];
@@ -387,6 +537,7 @@ class SongApiController extends Controller
                     'genre' => $song->genre,
                     'mood' => $song->mood,
                     'song_url' => $songUrl,
+                    'cover_image' => $this->buildCoverImageUrl($song->cover_image, $song->appUser?->api_user_id),
                     'created_at' => $song->created_at,
                 ];
             });

@@ -142,6 +142,12 @@
                                         <td>Absolute URL of the song file</td>
                                     </tr>
                                     <tr>
+                                        <td><code>cover_image</code></td>
+                                        <td>string</td>
+                                        <td><span class="badge badge-secondary">No</span></td>
+                                        <td>Base64-encoded song cover image (data URI or raw Base64)</td>
+                                    </tr>
+                                    <tr>
                                         <td><code>title</code>/<code>genre</code>/<code>mood</code></td>
                                         <td>string</td>
                                         <td><span class="badge badge-secondary">No</span></td>
@@ -156,11 +162,101 @@
         </div>
 
         <div class="row">
-            <!-- 3. Get Songs By Filter API -->
+            <!-- 3. Get User API -->
             <div class="col-md-6 grid-margin stretch-card">
                 <div class="card">
                     <div class="card-body">
-                        <h4 class="card-title font-weight-bold">3. Get Songs By Filter</h4>
+                        <h4 class="card-title font-weight-bold">3. Get User</h4>
+                        <p class="mb-4">
+                            <span class="font-weight-medium">Method:</span>
+                            <span class="badge badge-success px-3 py-2">POST</span>
+                        </p>
+
+                        <div class="bg-light p-3 rounded mb-4">
+                            <span class="font-weight-medium">URL:</span><br>
+                            <span class="text-danger">{{ url('/') }}/api/get-user</span>
+                        </div>
+
+                        <h5 class="font-weight-medium mb-3">Headers:</h5>
+                        <p class="mb-4 text-muted">No authorization header required</p>
+
+                        <h5 class="font-weight-medium mb-2">Parameters:</h5>
+                        <div class="table-responsive">
+                            <table class="table table-bordered table-sm mb-0">
+                                <thead class="bg-light">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Required</th>
+                                        <th>Description</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><code>user_id</code></td>
+                                        <td>string</td>
+                                        <td><span class="badge badge-danger">Yes</span></td>
+                                        <td>API User ID to fetch the user data.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <!-- 4. Delete User API -->
+            <div class="col-md-6 grid-margin stretch-card">
+                <div class="card">
+                    <div class="card-body">
+                        <h4 class="card-title font-weight-bold">4. Delete User</h4>
+                        <p class="mb-4">
+                            <span class="font-weight-medium">Method:</span>
+                            <span class="badge badge-danger px-3 py-2">POST</span>
+                        </p>
+
+                        <div class="bg-light p-3 rounded mb-4">
+                            <span class="font-weight-medium">URL:</span><br>
+                            <span class="text-danger">{{ url('/') }}/api/delete-user</span>
+                        </div>
+
+                        <h5 class="font-weight-medium mb-3">Headers:</h5>
+                        <p class="mb-4 text-muted">No authorization header required</p>
+
+                        <h5 class="font-weight-medium mb-2">Parameters:</h5>
+                        <div class="table-responsive">
+                            <table class="table table-bordered table-sm mb-0">
+                                <thead class="bg-light">
+                                    <tr>
+                                        <th>Parameter</th>
+                                        <th>Type</th>
+                                        <th>Required</th>
+                                        <th>Description</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><code>user_id</code></td>
+                                        <td>string</td>
+                                        <td><span class="badge badge-danger">Yes</span></td>
+                                        <td>API User ID whose account and songs should be deleted.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <!-- 5. Get Songs By Filter API -->
+            <div class="col-md-6 grid-margin stretch-card">
+                <div class="card">
+                    <div class="card-body">
+                        <h4 class="card-title font-weight-bold">5. Get Songs By Filter</h4>
                         <p class="mb-4">
                             <span class="font-weight-medium">Method:</span>
                             <span class="badge badge-success px-3 py-2">POST</span>
@@ -209,11 +305,11 @@
                 </div>
             </div>
 
-            <!-- 4. Get Random Songs API -->
+            <!-- 6. Get Random Songs API -->
             <div class="col-md-6 grid-margin stretch-card">
                 <div class="card">
                     <div class="card-body">
-                        <h4 class="card-title font-weight-bold">4. Get Random Songs</h4>
+                        <h4 class="card-title font-weight-bold">6. Get Random Songs</h4>
                         <p class="mb-4">
                             <span class="font-weight-medium">Method:</span>
                             <span class="badge badge-primary px-3 py-2">GET</span>
@@ -239,11 +335,11 @@
         </div>
 
         <div class="row">
-            <!-- 5. Get All Moods API -->
+            <!-- 7. Get All Moods API -->
             <div class="col-md-6 grid-margin stretch-card">
                 <div class="card">
                     <div class="card-body">
-                        <h4 class="card-title font-weight-bold">5. Get All Moods</h4>
+                        <h4 class="card-title font-weight-bold">7. Get All Moods</h4>
                         <p class="mb-4">
                             <span class="font-weight-medium">Method:</span>
                             <span class="badge badge-primary px-3 py-2">GET</span>
@@ -267,11 +363,11 @@
                 </div>
             </div>
 
-            <!-- 6. Get All Genres API -->
+            <!-- 8. Get All Genres API -->
             <div class="col-md-6 grid-margin stretch-card">
                 <div class="card">
                     <div class="card-body">
-                        <h4 class="card-title font-weight-bold">6. Get All Genres</h4>
+                        <h4 class="card-title font-weight-bold">8. Get All Genres</h4>
                         <p class="mb-4">
                             <span class="font-weight-medium">Method:</span>
                             <span class="badge badge-primary px-3 py-2">GET</span>
@@ -297,11 +393,11 @@
         </div>
 
         <div class="row">
-            <!-- 7. Edit Profile API -->
+            <!-- 9. Edit Profile API -->
             <div class="col-md-6 grid-margin stretch-card">
                 <div class="card">
                     <div class="card-body">
-                        <h4 class="card-title font-weight-bold">7. Edit Profile</h4>
+                        <h4 class="card-title font-weight-bold">9. Edit Profile</h4>
                         <p class="mb-4">
                             <span class="font-weight-medium">Method:</span>
                             <span class="badge badge-success px-3 py-2">POST</span>

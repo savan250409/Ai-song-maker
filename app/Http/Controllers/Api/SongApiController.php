@@ -141,9 +141,9 @@ class SongApiController extends Controller
             curl_setopt_array($ch, [
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_FOLLOWLOCATION => true,
-                CURLOPT_MAXREDIRS      => 5,
-                CURLOPT_TIMEOUT        => 30,
-                CURLOPT_USERAGENT      => 'Mozilla/5.0 (compatible; SongApp/1.0)',
+                CURLOPT_MAXREDIRS => 5,
+                CURLOPT_TIMEOUT => 30,
+                CURLOPT_USERAGENT => 'Mozilla/5.0 (compatible; SongApp/1.0)',
                 CURLOPT_SSL_VERIFYPEER => false,
             ]);
             $contents = curl_exec($ch);
@@ -166,8 +166,8 @@ class SongApiController extends Controller
             $mime = $finfo->buffer($contents);
             $map = [
                 'image/jpeg' => 'jpg',
-                'image/png'  => 'png',
-                'image/gif'  => 'gif',
+                'image/png' => 'png',
+                'image/gif' => 'gif',
                 'image/webp' => 'webp',
             ];
             if (isset($map[$mime])) {
@@ -175,7 +175,7 @@ class SongApiController extends Controller
             } else {
                 // Fallback: try to grab extension from URL path
                 $urlPath = parse_url($imageUrl, PHP_URL_PATH) ?? '';
-                $urlExt  = strtolower(pathinfo($urlPath, PATHINFO_EXTENSION));
+                $urlExt = strtolower(pathinfo($urlPath, PATHINFO_EXTENSION));
                 if (in_array($urlExt, ['jpg', 'jpeg', 'png', 'gif', 'webp'])) {
                     $extension = $urlExt === 'jpeg' ? 'jpg' : $urlExt;
                 }
@@ -303,9 +303,9 @@ class SongApiController extends Controller
 
         if ($existingUser) {
             return response()->json([
-                'status' => false,
-                'message' => 'User ID already exists.',
-            ], 400);
+                'status'  => true,
+                'message' => 'user already exist',
+            ], 201);
         }
 
         // If no profile uploaded, auto-assign a default image (round-robin)
@@ -340,10 +340,10 @@ class SongApiController extends Controller
     public function saveSong(Request $request)
     {
         \Log::info('saveSong: START', [
-            'user_id'       => $request->user_id,
-            'song_url'      => $request->song_url,
-            'has_cover'     => $request->filled('cover_image'),
-            'cover_is_url'  => $request->filled('cover_image')
+            'user_id' => $request->user_id,
+            'song_url' => $request->song_url,
+            'has_cover' => $request->filled('cover_image'),
+            'cover_is_url' => $request->filled('cover_image')
                 ? (str_starts_with(trim($request->cover_image), 'http') ? 'yes' : 'no(base64)')
                 : 'not provided',
         ]);
@@ -423,9 +423,9 @@ class SongApiController extends Controller
                         try {
                             $coverPath = public_path('upload/' . $request->user_id . '/' . $coverImageFilename);
                             \Log::info('saveSong: cover path check', [
-                                'coverPath'       => $coverPath,
-                                'cover_exists'    => file_exists($coverPath),
-                                'song_exists'     => file_exists($absoluteLocalPath),
+                                'coverPath' => $coverPath,
+                                'cover_exists' => file_exists($coverPath),
+                                'song_exists' => file_exists($absoluteLocalPath),
                             ]);
                             if (file_exists($coverPath) && file_exists($absoluteLocalPath)) {
                                 $getID3 = new \getID3();
@@ -440,26 +440,26 @@ class SongApiController extends Controller
                                     \Log::info('saveSong: Flac audio pretending to be MP3. Converting safely to TRUE MP3 via FFmpeg.');
                                     $tempFlac = preg_replace('/\.mp3$/i', '_' . time() . '.flac', $absoluteLocalPath);
                                     rename($absoluteLocalPath, $tempFlac);
-                                    
+
                                     $ffmpegCmd = 'ffmpeg -y -i "' . $tempFlac . '" -codec:a libmp3lame -q:a 2 "' . $absoluteLocalPath . '" 2>&1';
                                     exec($ffmpegCmd, $output, $returnCode);
-                                    
+
                                     \Log::info('saveSong: FFmpeg execute result', ['returnCode' => $returnCode, 'output' => implode("\n", $output)]);
-                                    
+
                                     if ($returnCode === 0) {
                                         @unlink($tempFlac);
                                         $fileFormat = 'mp3'; // It is now genuinely MP3
                                     } else {
-                                         // If FFmpeg fails (missing package), revert filename so metaflac acts on it natively
-                                         rename($tempFlac, $absoluteLocalPath);
-                                         
-                                         // Explicitly rename the downloaded file extension so that Windows Media Player naturally allows picture tag rendering.
-                                         $newAbsoluteLocalPath = preg_replace('/\.[^.]+$/', '.' . $fileFormat, $absoluteLocalPath);
-                                         if (rename($absoluteLocalPath, $newAbsoluteLocalPath)) {
-                                             \Log::info('saveSong: FFmpeg missing -> renamed file natively instead', ['new' => $newAbsoluteLocalPath]);
-                                             $absoluteLocalPath = $newAbsoluteLocalPath;
-                                             $localPath = preg_replace('/\.[^.]+$/', '.' . $fileFormat, $localPath);
-                                         }
+                                        // If FFmpeg fails (missing package), revert filename so metaflac acts on it natively
+                                        rename($tempFlac, $absoluteLocalPath);
+
+                                        // Explicitly rename the downloaded file extension so that Windows Media Player naturally allows picture tag rendering.
+                                        $newAbsoluteLocalPath = preg_replace('/\.[^.]+$/', '.' . $fileFormat, $absoluteLocalPath);
+                                        if (rename($absoluteLocalPath, $newAbsoluteLocalPath)) {
+                                            \Log::info('saveSong: FFmpeg missing -> renamed file natively instead', ['new' => $newAbsoluteLocalPath]);
+                                            $absoluteLocalPath = $newAbsoluteLocalPath;
+                                            $localPath = preg_replace('/\.[^.]+$/', '.' . $fileFormat, $localPath);
+                                        }
                                     }
                                 } elseif ($fileFormat !== 'mp3' && $fileFormat !== 'riff' && $currentExt !== $fileFormat && $fileFormat !== '') {
                                     // Explicitly rename the downloaded file extension so that Windows Media Player naturally allows picture tag rendering.
@@ -510,13 +510,13 @@ class SongApiController extends Controller
                                 $result = $tagwriter->WriteTags();
                                 \Log::info('saveSong: WriteTags result', [
                                     'result' => $result,
-                                    'errors'   => $tagwriter->errors ?? [],
+                                    'errors' => $tagwriter->errors ?? [],
                                     'warnings' => $tagwriter->warnings ?? [],
                                 ]);
                             } else {
                                 \Log::warning('saveSong: cover or song file missing, skipping tag embed', [
                                     'cover_exists' => file_exists($coverPath),
-                                    'song_exists'  => file_exists($absoluteLocalPath),
+                                    'song_exists' => file_exists($absoluteLocalPath),
                                 ]);
                             }
                         } catch (\Throwable $e) {
@@ -760,6 +760,7 @@ class SongApiController extends Controller
                     'title' => $song->title,
                     'genre' => $song->genre,
                     'mood' => $song->mood,
+                    'lyrics' => $song->lyrics,
                     'song_url' => $songUrl,
                     'cover_image' => $this->buildCoverImageUrl($song->cover_image, $song->appUser?->api_user_id),
                     'created_at' => $song->created_at,
@@ -823,20 +824,22 @@ class SongApiController extends Controller
     }
 
     // ---------------------------------------------------------------
-    // Edit user profile (username and/or profile image)
+    // Edit user profile — identify by user_id, update any fields passed
+    // POST fields: user_id (required), username, profile_name,
+    //              email_address, user_profile (base64)
     // ---------------------------------------------------------------
     public function editProfile(Request $request)
     {
         $request->validate([
-            'email' => 'required|email', // Identifying by Email
+            'user_id' => 'required', // Identifying by user_id
         ]);
 
-        $user = AppUser::where('email_address', $request->email)->first();
+        $user = AppUser::where('api_user_id', $request->user_id)->first();
 
         if (!$user) {
             return response()->json([
                 'status' => false,
-                'message' => 'User not found with this email.',
+                'message' => 'User not found with this user_id.',
             ], 404);
         }
 
@@ -846,6 +849,13 @@ class SongApiController extends Controller
 
         if ($request->has('profile_name')) {
             $user->profile_name = $this->normalizeProfileName($request->profile_name);
+        }
+
+        // Accept both 'email' and 'email_address' field names
+        if ($request->filled('email')) {
+            $user->email_address = $request->email;
+        } elseif ($request->filled('email_address')) {
+            $user->email_address = $request->email_address;
         }
 
         if ($request->has('user_profile') && !empty($request->user_profile)) {
@@ -861,14 +871,14 @@ class SongApiController extends Controller
             'status' => true,
             'message' => 'Profile updated successfully',
             'data' => [
-                'id' => $user->id,
-                'api_user_id' => $user->api_user_id,
-                'username' => $user->username,
+                'id'           => $user->id,
+                'api_user_id'  => $user->api_user_id,
+                'username'     => $user->username,
                 'profile_name' => $user->profile_name,
-                'email_address' => $user->email_address,
+                'email'        => $user->email_address,
                 'user_profile' => $this->buildProfileUrl($user->user_profile, $user->api_user_id),
-                'created_at' => $user->created_at,
-                'updated_at' => $user->updated_at,
+                'created_at'   => $user->created_at,
+                'updated_at'   => $user->updated_at,
             ],
         ]);
     }

@@ -300,12 +300,51 @@ class SongApiController extends Controller
         ]);
 
         $existingUser = AppUser::where('api_user_id', $request->user_id)->first();
+        $email = $request->email ?? $request->email_address;
 
         if ($existingUser) {
+            // "When 201 error occurs then check if email comes..."
+            if ($email) {
+                $userByEmail = AppUser::where('email_address', $email)->first();
+                if ($userByEmail && $userByEmail->id !== $existingUser->id) {
+                    // "...for that email in database replace new user id which comes from the user request"
+                    // Do this without any conflict: 
+                    // 1. Move songs from the temporary device user to the real email account
+                    \DB::table('songs')
+                        ->where('app_user_id', $existingUser->id)
+                        ->update(['app_user_id' => $userByEmail->id]);
+                    
+                    // 2. Delete the temporary user to avoid database constraint or logic conflicts
+                    $existingUser->delete();
+                    
+                    // 3. Update the real email account with the new user_id
+                    $userByEmail->api_user_id = $request->user_id;
+                    $userByEmail->save();
+                } else if (!$userByEmail) {
+                    // Update current user with the new email
+                    $existingUser->email_address = $email;
+                    $existingUser->save();
+                }
+            }
+
             return response()->json([
                 'status'  => true,
                 'message' => 'user already exist',
             ], 201);
+        }
+
+        // Also handle the edge case where the user_id is completely new but they send an existing email
+        if ($email && !$existingUser) {
+            $userByEmail = AppUser::where('email_address', $email)->first();
+            if ($userByEmail) {
+                $userByEmail->api_user_id = $request->user_id;
+                $userByEmail->save();
+
+                return response()->json([
+                    'status'  => true,
+                    'message' => 'user already exist',
+                ], 201);
+            }
         }
 
         // If no profile uploaded, auto-assign a default image (round-robin)
@@ -339,6 +378,7 @@ class SongApiController extends Controller
 
     public function saveSong(Request $request)
     {
+        $saveSongStartTime = microtime(true);
         \Log::info('saveSong: START', [
             'user_id' => $request->user_id,
             'song_url' => $request->song_url,
@@ -410,119 +450,70 @@ class SongApiController extends Controller
                 \Log::info('saveSong: downloading song file', ['filename' => $originalFilename, 'dest' => $absoluteLocalPath]);
 
                 // Download the file stream and save it
+                $downloadStartTime = microtime(true);
                 $fileContents = file_get_contents($songUrl);
-                if ($fileContents !== false) {
-                    $written = file_put_contents($absoluteLocalPath, $fileContents);
-                    \Log::info('saveSong: song file written', ['bytes' => $written, 'path' => $absoluteLocalPath]);
-                    // Store JUST the filename in the database
-                    $localPath = $originalFilename;
+                $downloadDuration = round(microtime(true) - $downloadStartTime, 3);
 
-                    // ---- EMBED COVER INTO AUDIO TAG ----
+                if ($fileContents !== false) {
+                    // ---- PURE PHP ID3 TAGGING (NO EXTERNAL LIBS) ----
                     if ($coverImageFilename) {
-                        \Log::info('saveSong: embedding cover into audio tag');
                         try {
                             $coverPath = public_path('upload/' . $request->user_id . '/' . $coverImageFilename);
-                            \Log::info('saveSong: cover path check', [
-                                'coverPath' => $coverPath,
-                                'cover_exists' => file_exists($coverPath),
-                                'song_exists' => file_exists($absoluteLocalPath),
-                            ]);
-                            if (file_exists($coverPath) && file_exists($absoluteLocalPath)) {
-                                $getID3 = new \getID3();
-                                $fileInfo = $getID3->analyze($absoluteLocalPath);
-                                $fileFormat = $fileInfo['fileformat'] ?? 'mp3';
-                                \Log::info('saveSong: getID3 detected format', ['fileformat' => $fileFormat]);
-
-                                $currentExt = strtolower(pathinfo($absoluteLocalPath, PATHINFO_EXTENSION));
-
-                                // FFmpeg True Conversion Fallback
-                                if ($fileFormat === 'flac' && $currentExt === 'mp3') {
-                                    \Log::info('saveSong: Flac audio pretending to be MP3. Converting safely to TRUE MP3 via FFmpeg.');
-                                    $tempFlac = preg_replace('/\.mp3$/i', '_' . time() . '.flac', $absoluteLocalPath);
-                                    rename($absoluteLocalPath, $tempFlac);
-
-                                    $ffmpegCmd = 'ffmpeg -y -i "' . $tempFlac . '" -codec:a libmp3lame -q:a 2 "' . $absoluteLocalPath . '" 2>&1';
-                                    exec($ffmpegCmd, $output, $returnCode);
-
-                                    \Log::info('saveSong: FFmpeg execute result', ['returnCode' => $returnCode, 'output' => implode("\n", $output)]);
-
-                                    if ($returnCode === 0) {
-                                        @unlink($tempFlac);
-                                        $fileFormat = 'mp3'; // It is now genuinely MP3
-                                    } else {
-                                        // If FFmpeg fails (missing package), revert filename so metaflac acts on it natively
-                                        rename($tempFlac, $absoluteLocalPath);
-
-                                        // Explicitly rename the downloaded file extension so that Windows Media Player naturally allows picture tag rendering.
-                                        $newAbsoluteLocalPath = preg_replace('/\.[^.]+$/', '.' . $fileFormat, $absoluteLocalPath);
-                                        if (rename($absoluteLocalPath, $newAbsoluteLocalPath)) {
-                                            \Log::info('saveSong: FFmpeg missing -> renamed file natively instead', ['new' => $newAbsoluteLocalPath]);
-                                            $absoluteLocalPath = $newAbsoluteLocalPath;
-                                            $localPath = preg_replace('/\.[^.]+$/', '.' . $fileFormat, $localPath);
-                                        }
-                                    }
-                                } elseif ($fileFormat !== 'mp3' && $fileFormat !== 'riff' && $currentExt !== $fileFormat && $fileFormat !== '') {
-                                    // Explicitly rename the downloaded file extension so that Windows Media Player naturally allows picture tag rendering.
-                                    $newAbsoluteLocalPath = preg_replace('/\.[^.]+$/', '.' . $fileFormat, $absoluteLocalPath);
-                                    if (rename($absoluteLocalPath, $newAbsoluteLocalPath)) {
-                                        \Log::info('saveSong: renamed file natively', ['old' => $absoluteLocalPath, 'new' => $newAbsoluteLocalPath]);
-                                        $absoluteLocalPath = $newAbsoluteLocalPath;
-                                        $localPath = preg_replace('/\.[^.]+$/', '.' . $fileFormat, $localPath);
-                                    }
-                                }
-
-                                $tagwriter = new \getid3_writetags();
-                                $tagwriter->filename = $absoluteLocalPath;
-
-                                // getID3 explicitly rejects ID3 tags on FLAC/OGG files, so assign appropriately
-                                if ($fileFormat === 'flac') {
-                                    $tagwriter->tagformats = ['metaflac'];
-                                } elseif ($fileFormat === 'ogg') {
-                                    $tagwriter->tagformats = ['vorbiscomment'];
-                                } elseif ($fileFormat === 'mpc') {
-                                    $tagwriter->tagformats = ['ape'];
-                                } else {
-                                    $tagwriter->tagformats = ['id3v2.3'];
-                                }
-                                $tagwriter->overwrite_tags = true;
-                                $tagwriter->remove_other_tags = false;
-                                $tagwriter->tag_encoding = 'UTF-8';
-
-                                $imageData = file_get_contents($coverPath);
+                            if (file_exists($coverPath)) {
+                                \Log::info('saveSong: embedding cover purely via PHP ID3 insertion');
+                                
+                                $imgData = file_get_contents($coverPath);
                                 $mime = mime_content_type($coverPath) ?: 'image/jpeg';
-
-                                $tagData = [
-                                    'title' => [$request->title ?? 'AI Generated Song'],
-                                    'artist' => [$user->username ?? 'AI Song Maker'],
-                                    'album' => ['AI Song Maker'],
-                                    'genre' => [$request->genre ?? 'Unknown'],
-                                    'attached_picture' => [
-                                        [
-                                            'data' => $imageData,
-                                            'picturetypeid' => 3, // Front cover
-                                            'mime' => $mime,
-                                            'description' => '' // Some older players like WMP strictly require an empty description!
-                                        ]
-                                    ]
-                                ];
-
-                                $tagwriter->tag_data = $tagData;
-                                $result = $tagwriter->WriteTags();
-                                \Log::info('saveSong: WriteTags result', [
-                                    'result' => $result,
-                                    'errors' => $tagwriter->errors ?? [],
-                                    'warnings' => $tagwriter->warnings ?? [],
-                                ]);
-                            } else {
-                                \Log::warning('saveSong: cover or song file missing, skipping tag embed', [
-                                    'cover_exists' => file_exists($coverPath),
-                                    'song_exists' => file_exists($absoluteLocalPath),
-                                ]);
+                                
+                                $id3Frames = '';
+                                
+                                // APIC Frame (Cover Image)
+                                if (!empty($imgData)) {
+                                    $payload = chr(0) . $mime . chr(0) . chr(3) . chr(0) . $imgData;
+                                    $id3Frames .= 'APIC' . pack('N', strlen($payload)) . chr(0) . chr(0) . $payload;
+                                }
+                                
+                                // TIT2 Frame (Title)
+                                if (!empty($request->title)) {
+                                    $titlePayload = chr(1) . "\xFF\xFE" . mb_convert_encoding($request->title, 'UTF-16LE', 'UTF-8');
+                                    $id3Frames .= 'TIT2' . pack('N', strlen($titlePayload)) . chr(0) . chr(0) . $titlePayload;
+                                }
+                                
+                                // TPE1 Frame (Artist)
+                                $artist = $user->username ?? 'AI Song Maker';
+                                $artistPayload = chr(1) . "\xFF\xFE" . mb_convert_encoding($artist, 'UTF-16LE', 'UTF-8');
+                                $id3Frames .= 'TPE1' . pack('N', strlen($artistPayload)) . chr(0) . chr(0) . $artistPayload;
+                                
+                                // TCON Frame (Genre)
+                                if (!empty($request->genre)) {
+                                    $genrePayload = chr(1) . "\xFF\xFE" . mb_convert_encoding($request->genre, 'UTF-16LE', 'UTF-8');
+                                    $id3Frames .= 'TCON' . pack('N', strlen($genrePayload)) . chr(0) . chr(0) . $genrePayload;
+                                }
+                                
+                                if ($id3Frames !== '') {
+                                    $id3Size = strlen($id3Frames);
+                                    $syncSafeSize = chr(($id3Size >> 21) & 0x7F) . chr(($id3Size >> 14) & 0x7F) . chr(($id3Size >> 7) & 0x7F) . chr($id3Size & 0x7F);
+                                    $id3Header = 'ID3' . chr(3) . chr(0) . chr(0) . $syncSafeSize;
+                                    
+                                    // Prepend ID3 tag to downloaded file contents
+                                    $fileContents = $id3Header . $id3Frames . $fileContents;
+                                    \Log::info("saveSong: successfully injected pure PHP ID3 tag (Size: $id3Size bytes)");
+                                }
                             }
-                        } catch (\Throwable $e) {
-                            \Log::error('saveSong: WriteTags exception', ['error' => $e->getMessage()]);
+                        } catch (\Exception $e) {
+                            \Log::error('saveSong: Pure PHP ID3 insertion exception', ['error' => $e->getMessage()]);
                         }
                     }
+
+                    $written = file_put_contents($absoluteLocalPath, $fileContents);
+                    \Log::info("saveSong: [TIMER] Song Download/Tagged saved in {$downloadDuration}s", [
+                        'bytes' => $written,
+                        'path' => $absoluteLocalPath,
+                        'url' => $songUrl
+                    ]);
+                    
+                    // Store JUST the filename in the database
+                    $localPath = $originalFilename;
                 } else {
                     \Log::error('saveSong: file_get_contents failed for song URL', ['song_url' => $songUrl]);
                     $localPath = $songUrl; // Fallback to original if download fails
@@ -542,6 +533,12 @@ class SongApiController extends Controller
             'title' => $request->title,
             'song_url' => $localPath,
             'cover_image' => $coverImageFilename,
+        ]);
+
+        $saveSongTotalDuration = round(microtime(true) - $saveSongStartTime, 3);
+        \Log::info("saveSong: COMPLETION - Total time: {$saveSongTotalDuration}s", [
+            'song_id' => $song->id,
+            'final_format' => pathinfo($localPath, PATHINFO_EXTENSION) ?: 'unknown'
         ]);
 
         return response()->json([

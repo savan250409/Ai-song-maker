@@ -14,6 +14,7 @@
     href="{{ asset('admin_assets/assets') }}/vendors/bootstrap-datepicker/bootstrap-datepicker.min.css">
   <link rel="stylesheet" href="{{ asset('admin_assets/assets') }}/css/style.css">
   <link rel="shortcut icon" href="{{ asset('admin_assets/assets') }}/images/favicon.png" />
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 
 <body>
@@ -35,11 +36,13 @@
           <li class="nav-item nav-profile dropdown">
             <a class="nav-link dropdown-toggle" id="profileDropdown" href="#" data-bs-toggle="dropdown"
               aria-expanded="false">
-              <div class="nav-profile-img">
-                <img src="{{ asset('admin_assets/assets') }}/images/faces/face1.jpg" alt="image">
+              <div class="nav-profile-img me-2">
+                <img src="{{ asset('admin_assets/assets') }}/images/faces/face1.jpg" alt="image" style="border: 2px solid #667eea;">
                 <span class="availability-status online"></span>
               </div>
-              <p class="mb-1 text-black">NGD Admin</p>
+              <div class="nav-profile-text">
+                <p class="mb-0 text-black font-weight-bold">NGD Admin</p>
+              </div>
             </a>
             <div class="dropdown-menu navbar-dropdown" aria-labelledby="profileDropdown">
               <div class="dropdown-divider"></div>
@@ -96,6 +99,12 @@
             </a>
           </li>
           <li class="nav-item">
+            <a class="nav-link" href="{{ route('admin.song_covers') }}">
+              <span class="menu-title">Song Cover</span>
+              <i class="mdi mdi-account-star menu-icon"></i>
+            </a>
+          </li>
+          <li class="nav-item">
             <a class="nav-link" href="{{ route('admin.api_list') }}">
               <span class="menu-title">API List</span>
               <i class="mdi mdi-api menu-icon"></i>
@@ -129,6 +138,17 @@
   <script src="{{ asset('admin_assets/assets') }}/js/todolist.js"></script>
   <script src="{{ asset('admin_assets/assets') }}/js/jquery.cookie.js"></script>
   <script src="{{ asset('admin_assets/assets') }}/js/dashboard.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      setTimeout(function() {
+        const alerts = document.querySelectorAll('.alert');
+        alerts.forEach(alert => {
+          alert.classList.remove('show');
+          setTimeout(() => alert.remove(), 150);
+        });
+      }, 5000);
+    });
+  </script>
 </body>
 
 </html>

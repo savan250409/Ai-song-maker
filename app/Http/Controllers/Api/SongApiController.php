@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 
 use App\Models\AppUser;
 use App\Models\Song;
+use App\Models\SongCover;
 use Illuminate\Support\Facades\Log;
 
 class SongApiController extends Controller
@@ -877,6 +878,23 @@ class SongApiController extends Controller
                 'created_at'   => $user->created_at,
                 'updated_at'   => $user->updated_at,
             ],
+        ]);
+    }
+
+    public function getSongCovers()
+    {
+        $voices = SongCover::all()->map(function ($cover) {
+            return [
+                'voice_id' => $cover->voice_id,
+                'voice_name' => $cover->voice_name,
+                'tts_only' => (bool)$cover->tts_only,
+                'image' => asset($cover->image),
+            ];
+        });
+
+        return response()->json([
+            'success' => true,
+            'voices' => $voices,
         ]);
     }
 }

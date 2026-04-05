@@ -204,9 +204,7 @@
                     </div>
                 </div>
             </div>
-        </div>
-
-        <div class="row">
+            
             <!-- 4. Delete User API -->
             <div class="col-md-6 grid-margin stretch-card">
                 <div class="card">
@@ -454,6 +452,35 @@
                         </div>
                         <p class="text-muted mt-3 mb-0"><small>Updates only the provided fields. The <code>email</code> is
                                 used to find the existing user record.</small></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 10. Get Song Covers API -->
+            <div class="col-md-6 grid-margin stretch-card">
+                <div class="card">
+                    <div class="card-body">
+                        <h4 class="card-title font-weight-bold">10. Get Song Covers</h4>
+                        <p class="mb-4">
+                            <span class="font-weight-medium">Method:</span>
+                            <span class="badge badge-primary px-3 py-2">GET</span>
+                        </p>
+
+                        <div class="bg-light p-3 rounded mb-4">
+                            <span class="font-weight-medium">URL:</span><br>
+                            <span class="text-danger">{{ url('/') }}/api/get-song-covers</span>
+                        </div>
+
+                        <h5 class="font-weight-medium mb-3">Headers:</h5>
+                        <p class="mb-4 text-muted">No authorization header required</p>
+
+                        <h5 class="font-weight-medium mb-3">Description:</h5>
+                        <p class="text-muted mb-0">
+                            Returns all available <strong>Song Cover Voices</strong> with their 
+                            <code>voice_id</code>, <code>voice_name</code>, <code>tts_only</code> status, 
+                            and full <code>image</code> URL. This is used for the song cover creation screen.
+                            No parameters needed.
+                        </p>
                     </div>
                 </div>
             </div>

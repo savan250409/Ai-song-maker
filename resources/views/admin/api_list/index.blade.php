@@ -195,8 +195,14 @@
                                     <tr>
                                         <td><code>user_id</code></td>
                                         <td>string</td>
-                                        <td><span class="badge badge-danger">Yes</span></td>
-                                        <td>API User ID to fetch the user data.</td>
+                                        <td><span class="badge badge-primary">Conditional</span></td>
+                                        <td>API User ID to fetch the user data (required if user_name is not provided).</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>user_name</code></td>
+                                        <td>string</td>
+                                        <td><span class="badge badge-primary">Conditional</span></td>
+                                        <td>Username to fetch the user data (required if user_id is not provided).</td>
                                     </tr>
                                 </tbody>
                             </table>

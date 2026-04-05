@@ -561,11 +561,25 @@ class SongApiController extends Controller
 
     public function getUser(Request $request)
     {
+        // Accept: user_id  OR  user_name  OR  username  OR  email
         $request->validate([
-            'user_id' => 'required',
+            'user_id' => 'required_without_all:user_name,username,email',
+        ], [
+            'user_id.required_without_all' => 'Provide at least one of: user_id, user_name, username, or email.',
         ]);
 
-        $user = AppUser::with('songs')->where('api_user_id', $request->user_id)->first();
+        $query = AppUser::with('songs');
+
+        if ($request->filled('user_id')) {
+            $query->where('api_user_id', $request->user_id);
+        } elseif ($request->filled('user_name') || $request->filled('username')) {
+            $userName = $request->user_name ?? $request->username;
+            $query->where('username', $userName);
+        } elseif ($request->filled('email')) {
+            $query->where('email_address', $request->email);
+        }
+
+        $user = $query->first();
 
         if (!$user) {
             return response()->json([

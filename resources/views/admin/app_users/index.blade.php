@@ -14,13 +14,13 @@
                 <div class="card">
                     <div class="card-body">
                         <h4 class="card-title mb-4">Registered Mobile API Users</h4>
-                        
-                        <!-- Search and Filter Bar (DataTables Style) -->
-                        <form action="{{ route('admin.app_users') }}" method="GET" class="mb-3">
+
+                        <!-- Search and Filter Bar -->
+                        <form id="appUsersFilterForm" action="{{ route('admin.app_users') }}" method="GET" class="mb-3">
                             <div class="d-flex justify-content-between align-items-center flex-wrap">
                                 <div class="d-flex align-items-center mb-2">
                                     <span>Show</span>
-                                    <select name="per_page" class="form-select form-select-sm mx-2" style="width: 80px;" onchange="this.form.submit()">
+                                    <select name="per_page" class="form-select form-select-sm mx-2" style="width: 80px;">
                                         <option value="5" {{ $perPage == 5 ? 'selected' : '' }}>5</option>
                                         <option value="10" {{ $perPage == 10 ? 'selected' : '' }}>10</option>
                                         <option value="25" {{ $perPage == 25 ? 'selected' : '' }}>25</option>
@@ -30,66 +30,82 @@
                                 </div>
                                 <div class="d-flex align-items-center mb-2">
                                     <span class="me-2">Search:</span>
-                                    <input type="text" name="search" class="form-control form-control-sm" placeholder="Search users..." value="{{ $search }}" style="width: 200px;">
+                                    <input type="text" name="search" class="form-control form-control-sm"
+                                        placeholder="Search users..." value="{{ $search }}" style="width: 200px;"
+                                        autocomplete="off">
                                 </div>
                             </div>
                         </form>
 
-                        <div class="table-responsive">
-                            <table class="table table-bordered table-hover">
-                                <thead class="bg-light">
-                                    <tr>
-                                        <th style="width: 80px;"> ID </th>
-                                        <th style="width: 90px;"> Profile </th>
-                                        <th> API User ID </th>
-                                        <th> Username </th>
-                                        <th style="width: 150px;"> Action </th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @forelse ($users as $user)
-                                        <tr>
-                                            <td> {{ $user->id }} </td>
-                                            <td>
-                                                @if ($user->user_profile)
-                                                    <img src="{{ asset($user->user_profile) }}"
-                                                         alt="Profile"
-                                                         style="width:45px;height:45px;object-fit:cover;border-radius:50%;border:2px solid #dee2e6;">
-                                                @else
-                                                    <span class="d-inline-flex align-items-center justify-content-center bg-secondary text-white rounded-circle"
-                                                          style="width:45px;height:45px;font-size:18px;">
-                                                        <i class="mdi mdi-account"></i>
-                                                    </span>
-                                                @endif
-                                            </td>
-                                            <td> {{ $user->api_user_id }} </td>
-                                            <td> {{ $user->username ?? 'N/A' }} </td>
-                                            <td>
-                                                <a href="{{ route('admin.user_songs', $user->id) }}"
-                                                    class="btn btn-gradient-primary btn-xs py-1 px-3">View Songs</a>
-                                            </td>
-                                        </tr>
-                                    @empty
-                                        <tr>
-                                            <td colspan="5" class="text-center text-muted py-4">No users found matching your search.</td>
-                                        </tr>
-                                    @endforelse
-                                </tbody>
-                            </table>
-                        </div>
-                        
-                        <!-- Footer Info and Pagination -->
-                        <div class="mt-4 d-flex justify-content-between align-items-center flex-wrap">
-                            <div class="text-muted small mb-2">
-                                Showing {{ $users->firstItem() ?? 0 }} to {{ $users->lastItem() ?? 0 }} of {{ $users->total() }} entries
-                            </div>
-                            <div class="pagination-container mb-2">
-                                {{ $users->links() }}
-                            </div>
+                        <div id="appUsersContent" style="position: relative; transition: opacity .15s ease;">
+                            @include('admin.app_users._table', ['users' => $users])
                         </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
+
+    <script>
+        (function () {
+            const baseUrl = @json(route('admin.app_users'));
+            const form = document.getElementById('appUsersFilterForm');
+            const content = document.getElementById('appUsersContent');
+            const searchInput = form.querySelector('input[name="search"]');
+            const perPageSelect = form.querySelector('select[name="per_page"]');
+            let debounceTimer;
+            let activeRequest;
+
+            function buildUrl(overrides = {}) {
+                const url = new URL(baseUrl, window.location.origin);
+                const search = overrides.search ?? searchInput.value;
+                const perPage = overrides.per_page ?? perPageSelect.value;
+                const page = overrides.page ?? 1;
+                if (search) url.searchParams.set('search', search);
+                if (perPage) url.searchParams.set('per_page', perPage);
+                if (page && page > 1) url.searchParams.set('page', page);
+                return url.toString();
+            }
+
+            function loadContent(url) {
+                if (activeRequest) activeRequest.abort();
+                const controller = new AbortController();
+                activeRequest = controller;
+                content.style.opacity = '0.5';
+                fetch(url, {
+                        headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'text/html' },
+                        signal: controller.signal
+                    })
+                    .then(r => r.text())
+                    .then(html => {
+                        content.innerHTML = html;
+                        content.style.opacity = '1';
+                    })
+                    .catch(err => {
+                        if (err.name !== 'AbortError') content.style.opacity = '1';
+                    });
+            }
+
+            form.addEventListener('submit', function (e) {
+                e.preventDefault();
+                loadContent(buildUrl());
+            });
+
+            searchInput.addEventListener('input', function () {
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(() => loadContent(buildUrl({ page: 1 })), 300);
+            });
+
+            perPageSelect.addEventListener('change', function () {
+                loadContent(buildUrl({ page: 1 }));
+            });
+
+            content.addEventListener('click', function (e) {
+                const link = e.target.closest('.pagination a');
+                if (!link) return;
+                e.preventDefault();
+                if (link.href) loadContent(link.href);
+            });
+        })();
+    </script>
 @endsection

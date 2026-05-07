@@ -14,12 +14,11 @@
             <div class="col-12">
                 <div class="card shadow-sm">
                     <div class="card-body py-3">
-                        <form action="{{ route('admin.songs') }}" method="GET">
+                        <form id="songsFilterForm" action="{{ route('admin.songs') }}" method="GET">
                             <div class="d-flex justify-content-between align-items-center flex-wrap">
                                 <div class="d-flex align-items-center mb-0">
                                     <span class="small">Show</span>
-                                    <select name="per_page" class="form-select form-select-sm mx-2" style="width: 80px;"
-                                        onchange="this.form.submit()">
+                                    <select name="per_page" class="form-select form-select-sm mx-2" style="width: 80px;">
                                         <option value="5" {{ $perPage == 5 ? 'selected' : '' }}>5</option>
                                         <option value="10" {{ $perPage == 10 ? 'selected' : '' }}>10</option>
                                         <option value="25" {{ $perPage == 25 ? 'selected' : '' }}>25</option>
@@ -30,7 +29,8 @@
                                 <div class="d-flex align-items-center mb-0">
                                     <span class="me-2 small">Search:</span>
                                     <input type="text" name="search" class="form-control form-control-sm"
-                                        placeholder="Search songs..." value="{{ $search }}" style="width: 200px;">
+                                        placeholder="Search songs..." value="{{ $search }}" style="width: 200px;"
+                                        autocomplete="off">
                                 </div>
                             </div>
                         </form>
@@ -39,83 +39,71 @@
             </div>
         </div>
 
-        @if($songs->isEmpty())
-            <div class="row">
-                <div class="col-12 grid-margin">
-                    <div class="card shadow-sm">
-                        <div class="card-body text-center py-5">
-                            <i class="mdi mdi-magnify-close mdi-48px text-muted mb-3 d-block"></i>
-                            <p class="text-muted mb-0">No songs found matching your search.</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        @else
-            <div class="row">
-                @foreach ($songs as $song)
-                    <div class="col-lg-3 col-md-4 col-sm-6 grid-margin stretch-card">
-                        <div class="card shadow-sm border-0 h-100">
-                            <div class="card-body p-3 d-flex flex-column h-100">
-                                <div class="d-flex align-items-center mb-2">
-                                    <div class="bg-gradient-primary rounded-circle p-2 text-white me-2"
-                                        style="width: 35px; height: 35px; min-width: 35px; display: flex; align-items: center; justify-content: center;">
-                                        <i class="mdi mdi-music-note mdi-18px"></i>
-                                    </div>
-                                    <div class="overflow-hidden">
-                                        <h6 class="card-title mb-0 text-truncate" title="{{ $song->title ?? 'Untitled Song' }}"
-                                            style="font-size: 0.9rem;">{{ $song->title ?? 'Untitled Song' }}</h6>
-                                        <small class="text-muted text-truncate d-block" style="font-size: 0.75rem;">By:
-                                            {{ $song->appUser->username ?? $song->appUser->api_user_id ?? 'Unknown' }}</small>
-                                    </div>
-                                </div>
-
-                                <div class="mb-2">
-                                    <span class="badge badge-gradient-info py-1 px-2"
-                                        style="font-size: 0.65rem;">{{ $song->genre ?? 'General' }}</span>
-                                    <span class="badge badge-gradient-success py-1 px-2"
-                                        style="font-size: 0.65rem;">{{ $song->mood ?? 'Happy' }}</span>
-                                </div>
-
-                                <div class="bg-light p-2 rounded mb-auto" style="height: 45px; overflow: hidden;">
-                                    <p class="text-muted mb-0" style="font-size: 0.75rem; line-height: 1.2;">
-                                        {{ Str::limit($song->lyrics, 60) ?? 'No lyrics.' }}
-                                    </p>
-                                </div>
-
-                                <div class="d-flex justify-content-between align-items-center mt-3 pt-2 border-top">
-                                    <small class="text-muted" style="font-size: 0.7rem;"><i class="mdi mdi-calendar mdi-12px"></i>
-                                        {{ $song->created_at->format('M d, y') }}</small>
-                                    @if ($song->song_url)
-                                        @if (filter_var($song->song_url, FILTER_VALIDATE_URL))
-                                            <a href="{{ $song->song_url }}" target="_blank"
-                                                class="btn btn-gradient-primary btn-xs py-1 px-2" style="font-size: 0.7rem;">
-                                                <i class="mdi mdi-play"></i> Listen
-                                            </a>
-                                        @else
-                                            <a href="{{ asset('upload/' . ($song->appUser->api_user_id ?? 'default') . '/' . $song->song_url) }}"
-                                                target="_blank" class="btn btn-gradient-primary btn-xs py-1 px-2"
-                                                style="font-size: 0.7rem;">
-                                                <i class="mdi mdi-play"></i> Listen
-                                            </a>
-                                        @endif
-                                    @endif
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                @endforeach
-            </div>
-
-            <div class="row mt-4">
-                <div class="col-12 d-flex justify-content-between align-items-center flex-wrap">
-                    <div class="text-muted small mb-2">
-                        Showing {{ $songs->firstItem() ?? 0 }} to {{ $songs->lastItem() ?? 0 }} of {{ $songs->total() }} entries
-                    </div>
-                    <div class="pagination-container mb-2">
-                        {{ $songs->links() }}
-                    </div>
-                </div>
-            </div>
-        @endif
+        <div id="songsContent" style="position: relative; transition: opacity .15s ease;">
+            @include('admin.songs._grid', ['songs' => $songs])
+        </div>
     </div>
+
+    <script>
+        (function () {
+            const baseUrl = @json(route('admin.songs'));
+            const form = document.getElementById('songsFilterForm');
+            const content = document.getElementById('songsContent');
+            const searchInput = form.querySelector('input[name="search"]');
+            const perPageSelect = form.querySelector('select[name="per_page"]');
+            let debounceTimer;
+            let activeRequest;
+
+            function buildUrl(overrides = {}) {
+                const url = new URL(baseUrl, window.location.origin);
+                const search = overrides.search ?? searchInput.value;
+                const perPage = overrides.per_page ?? perPageSelect.value;
+                const page = overrides.page ?? 1;
+                if (search) url.searchParams.set('search', search);
+                if (perPage) url.searchParams.set('per_page', perPage);
+                if (page && page > 1) url.searchParams.set('page', page);
+                return url.toString();
+            }
+
+            function loadContent(url) {
+                if (activeRequest) activeRequest.abort();
+                const controller = new AbortController();
+                activeRequest = controller;
+                content.style.opacity = '0.5';
+                fetch(url, {
+                        headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'text/html' },
+                        signal: controller.signal
+                    })
+                    .then(r => r.text())
+                    .then(html => {
+                        content.innerHTML = html;
+                        content.style.opacity = '1';
+                    })
+                    .catch(err => {
+                        if (err.name !== 'AbortError') content.style.opacity = '1';
+                    });
+            }
+
+            form.addEventListener('submit', function (e) {
+                e.preventDefault();
+                loadContent(buildUrl());
+            });
+
+            searchInput.addEventListener('input', function () {
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(() => loadContent(buildUrl({ page: 1 })), 300);
+            });
+
+            perPageSelect.addEventListener('change', function () {
+                loadContent(buildUrl({ page: 1 }));
+            });
+
+            content.addEventListener('click', function (e) {
+                const link = e.target.closest('.pagination a');
+                if (!link) return;
+                e.preventDefault();
+                if (link.href) loadContent(link.href);
+            });
+        })();
+    </script>
 @endsection

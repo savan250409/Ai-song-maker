@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 
 use App\Models\AppUser;
 use App\Models\Song;
+use App\Models\SongCover;
 
 class SongModuleController extends Controller
 {
@@ -14,7 +15,18 @@ class SongModuleController extends Controller
     {
         $totalUsers = AppUser::count();
         $totalSongs = Song::count();
-        return view('admin.dashboard', compact('totalUsers', 'totalSongs'));
+        $totalCovers = SongCover::count();
+
+        $recentUsers = AppUser::orderBy('id', 'desc')->take(5)->get();
+        $recentSongs = Song::with('appUser')->orderBy('id', 'desc')->take(5)->get();
+
+        return view('admin.dashboard', compact(
+            'totalUsers',
+            'totalSongs',
+            'totalCovers',
+            'recentUsers',
+            'recentSongs'
+        ));
     }
     public function appUsers(Request $request)
     {
@@ -31,6 +43,10 @@ class SongModuleController extends Controller
         }
 
         $users = $query->orderBy('id', 'desc')->paginate($perPage)->withQueryString();
+
+        if ($request->ajax()) {
+            return view('admin.app_users._table', compact('users'));
+        }
         return view('admin.app_users.index', compact('users', 'search', 'perPage'));
     }
 
@@ -54,6 +70,10 @@ class SongModuleController extends Controller
         }
 
         $songs = $query->orderBy('id', 'desc')->paginate($perPage)->withQueryString();
+
+        if ($request->ajax()) {
+            return view('admin.songs._grid', compact('songs'));
+        }
         return view('admin.songs.index', compact('songs', 'search', 'perPage'));
     }
 

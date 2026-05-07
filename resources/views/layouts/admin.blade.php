@@ -14,6 +14,11 @@
     href="{{ asset('admin_assets/assets') }}/vendors/bootstrap-datepicker/bootstrap-datepicker.min.css">
   <link rel="stylesheet" href="{{ asset('admin_assets/assets') }}/css/style.css">
   <link rel="shortcut icon" href="{{ asset('admin_assets/assets') }}/images/favicon.png" />
+  <style>
+    .d-none.flex-sm-fill.d-sm-flex.align-items-sm-center.justify-content-sm-between {
+      gap: 1rem;
+    }
+  </style>
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 

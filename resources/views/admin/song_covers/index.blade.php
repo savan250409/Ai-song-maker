@@ -39,12 +39,11 @@
                         <h4 class="card-title mb-4">Manage Song Cover Voices</h4>
 
                         <!-- Search Bar -->
-                        <form action="{{ route('admin.song_covers') }}" method="GET" class="mb-3">
+                        <form id="songCoversFilterForm" action="{{ route('admin.song_covers') }}" method="GET" class="mb-3">
                             <div class="d-flex justify-content-between align-items-center flex-wrap">
                                 <div class="d-flex align-items-center mb-2">
                                     <span>Show</span>
-                                    <select name="per_page" class="form-select form-select-sm mx-2" style="width: 80px;"
-                                        onchange="this.form.submit()">
+                                    <select name="per_page" class="form-select form-select-sm mx-2" style="width: 80px;">
                                         <option value="5" {{ $perPage == 5 ? 'selected' : '' }}>5</option>
                                         <option value="10" {{ $perPage == 10 ? 'selected' : '' }}>10</option>
                                         <option value="25" {{ $perPage == 25 ? 'selected' : '' }}>25</option>
@@ -54,75 +53,14 @@
                                 <div class="d-flex align-items-center mb-2">
                                     <span class="me-2">Search:</span>
                                     <input type="text" name="search" class="form-control form-control-sm"
-                                        placeholder="Name or ID..." value="{{ $search }}" style="width: 200px;">
+                                        placeholder="Name or ID..." value="{{ $search }}" style="width: 200px;"
+                                        autocomplete="off">
                                 </div>
                             </div>
                         </form>
 
-                        <div class="table-responsive">
-                            <table class="table table-bordered table-hover">
-                                <thead class="bg-light">
-                                    <tr>
-                                        <th style="width: 70px;"> ID </th>
-                                        <th style="width: 100px;"> Image </th>
-                                        <th> Voice ID </th>
-                                        <th> Voice Name </th>
-                                        <th style="width: 100px;"> TTS Only </th>
-                                        <th style="width: 150px;"> Action </th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @forelse ($covers as $cover)
-                                        <tr>
-                                            <td> {{ $cover->id }} </td>
-                                            <td>
-                                                <img src="{{ asset($cover->image) }}" alt="Image"
-                                                    style="width:50px;height:50px;object-fit:cover;border-radius:10px;">
-                                            </td>
-                                            <td> {{ $cover->voice_id }} </td>
-                                            <td> {{ $cover->voice_name }} </td>
-                                            <td>
-                                                <span class="badge {{ $cover->tts_only ? 'badge-info' : 'badge-secondary' }}">
-                                                    {{ $cover->tts_only ? 'true' : 'false' }}
-                                                </span>
-                                            </td>
-                                            <td>
-                                                <button class="btn btn-gradient-info btn-xs py-1 px-3 edit-btn"
-                                                    data-bs-toggle="modal" data-bs-target="#editVoiceModal"
-                                                    data-id="{{ $cover->id }}" 
-                                                    data-voice_id="{{ $cover->voice_id }}"
-                                                    data-voice_name="{{ $cover->voice_name }}"
-                                                    data-tts_only="{{ $cover->tts_only }}"
-                                                    data-image="{{ asset($cover->image) }}">
-                                                    Edit
-                                                </button>
-                                                <form action="{{ route('admin.song_covers.destroy', $cover->id) }}"
-                                                    method="POST" class="d-inline delete-form">
-                                                    @csrf
-                                                    @method('DELETE')
-                                                    <button type="submit"
-                                                        class="btn btn-gradient-danger btn-xs py-1 px-3">Delete</button>
-                                                </form>
-                                            </td>
-                                        </tr>
-                                    @empty
-                                        <tr>
-                                            <td colspan="6" class="text-center text-muted py-4">No voices found.</td>
-                                        </tr>
-                                    @endforelse
-                                </tbody>
-                            </table>
-                        </div>
-
-                        <!-- Pagination -->
-                        <div class="mt-4 d-flex justify-content-between align-items-center flex-wrap">
-                            <div class="text-muted small mb-2">
-                                Showing {{ $covers->firstItem() ?? 0 }} to {{ $covers->lastItem() ?? 0 }} of
-                                {{ $covers->total() }} entries
-                            </div>
-                            <div class="pagination-container mb-2">
-                                {{ $covers->links() }}
-                            </div>
+                        <div id="songCoversContent" style="position: relative; transition: opacity .15s ease;">
+                            @include('admin.song_covers._table', ['covers' => $covers])
                         </div>
                     </div>
                 </div>
@@ -227,33 +165,44 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // Edit Button Handler
-            const editButtons = document.querySelectorAll('.edit-btn');
             const editForm = document.getElementById('editVoiceForm');
             const editVoiceId = document.getElementById('edit_voice_id');
             const editVoiceName = document.getElementById('edit_voice_name');
             const editTtsOnly = document.getElementById('edit_tts_only');
             const currentImagePreview = document.getElementById('current_image_preview');
+            const content = document.getElementById('songCoversContent');
 
-            editButtons.forEach(button => {
-                button.addEventListener('click', function() {
-                    const id = this.getAttribute('data-id');
-                    const voice_id = this.getAttribute('data-voice_id');
-                    const voice_name = this.getAttribute('data-voice_name');
-                    const tts_only = this.getAttribute('data-tts_only') == '1';
-                    const image = this.getAttribute('data-image');
+            // Delegated Edit Button Handler — survives AJAX content swaps
+            content.addEventListener('click', function(e) {
+                const button = e.target.closest('.edit-btn');
+                if (!button) return;
+                const id = button.getAttribute('data-id');
+                editForm.action = `/admin/song-covers/${id}`;
+                editVoiceId.value = button.getAttribute('data-voice_id');
+                editVoiceName.value = button.getAttribute('data-voice_name');
+                editTtsOnly.checked = button.getAttribute('data-tts_only') == '1';
+                currentImagePreview.src = button.getAttribute('data-image');
+            });
 
-                    // Laravel's POST route for update in this case uses a POST to /{id} with potential method spoofing, 
-                    // but I registered it as Route::post('/admin/song-covers/{id}', ...) in web.php to simplify file upload handling.
-                    editForm.action = `/admin/song-covers/${id}`;
-                    editVoiceId.value = voice_id;
-                    editVoiceName.value = voice_name;
-                    editTtsOnly.checked = tts_only;
-                    currentImagePreview.src = image;
+            // Delegated Delete Confirmation — survives AJAX content swaps
+            content.addEventListener('submit', function(e) {
+                const form = e.target.closest('.delete-form');
+                if (!form) return;
+                e.preventDefault();
+                Swal.fire({
+                    title: 'Are you sure?',
+                    text: "This voice and its image will be permanently deleted!",
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: '#fe7096',
+                    cancelButtonColor: '#6c757d',
+                    confirmButtonText: 'Yes, delete it!'
+                }).then((result) => {
+                    if (result.isConfirmed) form.submit();
                 });
             });
 
-            // .webp validation & Image Preview
+            // .webp validation & Image Preview (modal inputs only — not AJAX-swapped)
             const fileInputs = document.querySelectorAll('input[type="file"]');
             fileInputs.forEach(input => {
                 input.addEventListener('change', function() {
@@ -267,12 +216,10 @@
                         const extension = file.name.split('.').pop().toLowerCase();
                         if (extension !== 'webp') {
                             warning.style.display = 'block';
-                            this.value = ''; // clear input
+                            this.value = '';
                             if (previewContainer) previewContainer.style.display = 'none';
                         } else {
                             warning.style.display = 'none';
-                            
-                            // Show preview
                             const reader = new FileReader();
                             reader.onload = function(e) {
                                 previewImg.src = e.target.result;
@@ -290,31 +237,65 @@
             setTimeout(function() {
                 const alerts = document.querySelectorAll('.alert');
                 alerts.forEach(alert => {
-                    // Use Bootstrap's fade class logic or just hide it
                     alert.classList.remove('show');
-                    setTimeout(() => alert.remove(), 150); // Small delay for transition
+                    setTimeout(() => alert.remove(), 150);
                 });
             }, 5000);
 
-            // SweetAlert Delete Confirmation
-            const deleteForms = document.querySelectorAll('.delete-form');
-            deleteForms.forEach(form => {
-                form.addEventListener('submit', function(e) {
-                    e.preventDefault();
-                    Swal.fire({
-                        title: 'Are you sure?',
-                        text: "This voice and its image will be permanently deleted!",
-                        icon: 'warning',
-                        showCancelButton: true,
-                        confirmButtonColor: '#fe7096',
-                        cancelButtonColor: '#6c757d',
-                        confirmButtonText: 'Yes, delete it!'
-                    }).then((result) => {
-                        if (result.isConfirmed) {
-                            this.submit();
-                        }
+            // ----- AJAX search / per-page / pagination -----
+            const baseUrl = @json(route('admin.song_covers'));
+            const form = document.getElementById('songCoversFilterForm');
+            const searchInput = form.querySelector('input[name="search"]');
+            const perPageSelect = form.querySelector('select[name="per_page"]');
+            let debounceTimer;
+            let activeRequest;
+
+            function buildUrl(overrides = {}) {
+                const url = new URL(baseUrl, window.location.origin);
+                const search = overrides.search ?? searchInput.value;
+                const perPage = overrides.per_page ?? perPageSelect.value;
+                const page = overrides.page ?? 1;
+                if (search) url.searchParams.set('search', search);
+                if (perPage) url.searchParams.set('per_page', perPage);
+                if (page && page > 1) url.searchParams.set('page', page);
+                return url.toString();
+            }
+
+            function loadContent(url) {
+                if (activeRequest) activeRequest.abort();
+                const controller = new AbortController();
+                activeRequest = controller;
+                content.style.opacity = '0.5';
+                fetch(url, {
+                        headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'text/html' },
+                        signal: controller.signal
+                    })
+                    .then(r => r.text())
+                    .then(html => {
+                        content.innerHTML = html;
+                        content.style.opacity = '1';
+                    })
+                    .catch(err => {
+                        if (err.name !== 'AbortError') content.style.opacity = '1';
                     });
-                });
+            }
+
+            form.addEventListener('submit', function(e) {
+                e.preventDefault();
+                loadContent(buildUrl());
+            });
+            searchInput.addEventListener('input', function() {
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(() => loadContent(buildUrl({ page: 1 })), 300);
+            });
+            perPageSelect.addEventListener('change', function() {
+                loadContent(buildUrl({ page: 1 }));
+            });
+            content.addEventListener('click', function(e) {
+                const link = e.target.closest('.pagination a');
+                if (!link) return;
+                e.preventDefault();
+                if (link.href) loadContent(link.href);
             });
         });
     </script>

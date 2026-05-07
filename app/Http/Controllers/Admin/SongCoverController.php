@@ -23,6 +23,10 @@ class SongCoverController extends Controller
         }
 
         $covers = $query->orderBy('id', 'desc')->paginate($perPage)->withQueryString();
+
+        if ($request->ajax()) {
+            return view('admin.song_covers._table', compact('covers'));
+        }
         return view('admin.song_covers.index', compact('covers', 'search', 'perPage'));
     }
 

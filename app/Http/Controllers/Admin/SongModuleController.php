@@ -42,7 +42,7 @@ class SongModuleController extends Controller
             });
         }
 
-        $users = $query->orderBy('id', 'desc')->paginate($perPage)->withQueryString();
+        $users = $query->orderBy('id', 'desc')->paginate($perPage)->withQueryString()->onEachSide(1);
 
         if ($request->ajax()) {
             return view('admin.app_users._table', compact('users'));
@@ -69,7 +69,7 @@ class SongModuleController extends Controller
             });
         }
 
-        $songs = $query->orderBy('id', 'desc')->paginate($perPage)->withQueryString();
+        $songs = $query->orderBy('id', 'desc')->paginate($perPage)->withQueryString()->onEachSide(1);
 
         if ($request->ajax()) {
             return view('admin.songs._grid', compact('songs'));

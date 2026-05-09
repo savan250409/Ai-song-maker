@@ -22,7 +22,7 @@ class SongCoverController extends Controller
                   ->orWhere('voice_id', 'LIKE', "%{$search}%");
         }
 
-        $covers = $query->orderBy('id', 'desc')->paginate($perPage)->withQueryString();
+        $covers = $query->orderBy('id', 'desc')->paginate($perPage)->withQueryString()->onEachSide(1);
 
         if ($request->ajax()) {
             return view('admin.song_covers._table', compact('covers'));

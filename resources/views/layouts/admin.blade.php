@@ -18,6 +18,82 @@
     .d-none.flex-sm-fill.d-sm-flex.align-items-sm-center.justify-content-sm-between {
       gap: 1rem;
     }
+
+    /* ===== Modern Pagination UI ===== */
+    /* Hide Laravel's duplicate "Showing X to Y of Z results" text inside the paginator */
+    .pagination-container nav .d-none.flex-sm-fill > div:first-child {
+      display: none !important;
+    }
+    /* Allow the pagination ul to sit flush to the right when info text is hidden */
+    .pagination-container nav .d-none.flex-sm-fill {
+      justify-content: flex-end !important;
+    }
+
+    .pagination-container .pagination {
+      display: inline-flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      align-items: center;
+    }
+    .pagination-container .pagination .page-item {
+      margin: 0;
+    }
+    .pagination-container .pagination .page-item .page-link {
+      border: 1px solid #e9ecef;
+      border-radius: 8px;
+      padding: 6px 12px;
+      min-width: 36px;
+      height: 36px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: #495057;
+      background: #fff;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+      transition: all .18s ease;
+      line-height: 1;
+    }
+    .pagination-container .pagination .page-item .page-link:hover {
+      background: #f3f5ff;
+      border-color: #667eea;
+      color: #667eea;
+      transform: translateY(-1px);
+      box-shadow: 0 3px 8px rgba(102, 126, 234, 0.15);
+    }
+    .pagination-container .pagination .page-item.active .page-link,
+    .pagination-container .pagination .page-item.active .page-link:hover {
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      border-color: transparent;
+      color: #fff;
+      font-weight: 600;
+      box-shadow: 0 4px 10px rgba(102, 126, 234, 0.35);
+      transform: none;
+    }
+    .pagination-container .pagination .page-item.disabled .page-link,
+    .pagination-container .pagination .page-item.disabled .page-link:hover {
+      background: #f8f9fa;
+      color: #adb5bd;
+      border-color: #e9ecef;
+      box-shadow: none;
+      transform: none;
+      cursor: not-allowed;
+    }
+    /* Mobile fallback (Laravel shows simple Prev/Next buttons under d-sm-none) */
+    .pagination-container nav .d-flex.d-sm-none {
+      gap: 8px;
+    }
+    .pagination-container nav .d-flex.d-sm-none .btn,
+    .pagination-container nav .d-flex.d-sm-none span,
+    .pagination-container nav .d-flex.d-sm-none a {
+      border-radius: 8px;
+      padding: 6px 14px;
+      font-size: 0.85rem;
+    }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
